@@ -1,4 +1,4 @@
- "use client";
+"use client";
 
 import { useEffect, useState } from "react";
 
@@ -19,62 +19,70 @@ const videos: VideoItem[] = [
   {
     id: 1,
     title: "It's Cool",
-    description: "Featured music video on Ray'snotes.",
+    description:
+      "Featured music video on Ray'sNotes.",
     src: "/videos/its%20cool.mp4",
   },
   {
     id: 2,
     title: "Video 2",
-    description: "Watch Video 2 on Ray'snotes.",
+    description:
+      "Watch Video 2 on Ray'sNotes.",
     src: "/videos/video2.mp4",
   },
   {
     id: 3,
     title: "Video 3",
-    description: "Watch Video 3 on Ray'snotes.",
+    description:
+      "Watch Video 3 on Ray'sNotes.",
     src: "/videos/video3.mp4",
   },
 ];
 
-const startingViews: NumberRecord = {
-  1: 0,
-  2: 0,
-  3: 0,
-};
-
-const startingLikes: NumberRecord = {
-  1: 0,
-  2: 0,
-  3: 0,
-};
-
-const startingLikedVideos: BooleanRecord = {
-  1: false,
-  2: false,
-  3: false,
-};
-
 export default function HomePage() {
-  const [views, setViews] = useState<NumberRecord>(startingViews);
-  const [likes, setLikes] = useState<NumberRecord>(startingLikes);
+  const [views, setViews] = useState<NumberRecord>({
+    1: 0,
+    2: 0,
+    3: 0,
+  });
+
+  const [likes, setLikes] = useState<NumberRecord>({
+    1: 0,
+    2: 0,
+    3: 0,
+  });
+
   const [likedVideos, setLikedVideos] =
-    useState<BooleanRecord>(startingLikedVideos);
+    useState<BooleanRecord>({
+      1: false,
+      2: false,
+      3: false,
+    });
 
   const [subscribed, setSubscribed] = useState(false);
-  const [subscriberCount, setSubscriberCount] = useState(0);
+  const [subscriberCount, setSubscriberCount] =
+    useState(0);
   const [loaded, setLoaded] = useState(false);
   const [message, setMessage] = useState("");
 
   useEffect(() => {
     try {
-      const savedViews = localStorage.getItem("raysnotes-views");
-      const savedLikes = localStorage.getItem("raysnotes-likes");
+      const savedViews = localStorage.getItem(
+        "raysnotes-views"
+      );
+
+      const savedLikes = localStorage.getItem(
+        "raysnotes-likes"
+      );
+
       const savedLikedVideos = localStorage.getItem(
         "raysnotes-liked-videos"
       );
+
       const savedSubscribed = localStorage.getItem(
         "raysnotes-subscribed"
       );
+
       const savedSubscriberCount = localStorage.getItem(
         "raysnotes-subscriber-count"
       );
@@ -99,7 +107,10 @@ export default function HomePage() {
         setSubscriberCount(Number(savedSubscriberCount));
       }
     } catch (error) {
-      console.error("Could not load saved Ray'snotes data:", error);
+      console.error(
+        "Could not load saved Ray'sNotes data:",
+        error
+      );
     } finally {
       setLoaded(true);
     }
@@ -108,13 +119,20 @@ export default function HomePage() {
   useEffect(() => {
     if (!loaded) return;
 
-    localStorage.setItem("raysnotes-views", JSON.stringify(views));
+    localStorage.setItem(
+      "raysnotes-views",
+      JSON.stringify(views)
+    );
   }, [views, loaded]);
 
   useEffect(() => {
     if (!loaded) return;
 
-    localStorage.setItem("raysnotes-likes", JSON.stringify(likes));
+    localStorage.setItem(
+      "raysnotes-likes",
+      JSON.stringify(likes)
+    );
+
     localStorage.setItem(
       "raysnotes-liked-videos",
       JSON.stringify(likedVideos)
@@ -169,7 +187,9 @@ export default function HomePage() {
   function handleSubscribe() {
     if (subscribed) {
       setSubscribed(false);
-      setSubscriberCount((count) => Math.max(0, count - 1));
+      setSubscriberCount((count) =>
+        Math.max(0, count - 1)
+      );
       showMessage("You have unsubscribed.");
     } else {
       setSubscribed(true);
@@ -179,14 +199,19 @@ export default function HomePage() {
   }
 
   function getVideoUrl(videoId: number) {
-    if (typeof window === "undefined") return "";
+    if (typeof window === "undefined") {
+      return "";
+    }
 
     return `${window.location.origin}/#video-${videoId}`;
   }
 
   async function copyVideoLink(videoId: number) {
     try {
-      await navigator.clipboard.writeText(getVideoUrl(videoId));
+      await navigator.clipboard.writeText(
+        getVideoUrl(videoId)
+      );
+
       showMessage("Video link copied.");
     } catch {
       showMessage("Unable to copy the link.");
@@ -200,7 +225,7 @@ export default function HomePage() {
       if (navigator.share) {
         await navigator.share({
           title: video.title,
-          text: `Watch ${video.title} on Ray'snotes`,
+          text: `Watch ${video.title} on Ray'sNotes`,
           url: shareUrl,
         });
       } else {
@@ -212,7 +237,9 @@ export default function HomePage() {
   }
 
   function shareToFacebook(videoId: number) {
-    const shareUrl = encodeURIComponent(getVideoUrl(videoId));
+    const shareUrl = encodeURIComponent(
+      getVideoUrl(videoId)
+    );
 
     window.open(
       `https://www.facebook.com/sharer/sharer.php?u=${shareUrl}`,
@@ -222,9 +249,12 @@ export default function HomePage() {
   }
 
   function shareToX(video: VideoItem) {
-    const shareUrl = encodeURIComponent(getVideoUrl(video.id));
+    const shareUrl = encodeURIComponent(
+      getVideoUrl(video.id)
+    );
+
     const text = encodeURIComponent(
-      `Watch ${video.title} on Ray'snotes`
+      `Watch ${video.title} on Ray'sNotes`
     );
 
     window.open(
@@ -235,78 +265,35 @@ export default function HomePage() {
   }
 
   return (
-    <main
-      style={{
-        minHeight: "100vh",
-        backgroundColor: "#080808",
-        color: "#ffffff",
-        fontFamily: "Arial, Helvetica, sans-serif",
-      }}
-    >
-      <header
-        style={{
-          position: "sticky",
-          top: 0,
-          zIndex: 50,
-          padding: "18px 20px",
-          backgroundColor: "rgba(15, 15, 15, 0.96)",
-          borderBottom: "1px solid #333333",
-          backdropFilter: "blur(10px)",
-        }}
-      >
-        <div
-          style={{
-            width: "100%",
-            maxWidth: "1150px",
-            margin: "0 auto",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: "18px",
-            flexWrap: "wrap",
-          }}
-        >
+    <main style={styles.page}>
+      <header style={styles.header}>
+        <div style={styles.headerInner}>
           <div>
-            <h1
-              style={{
-                margin: 0,
-                color: "#ff3b30",
-                fontSize: "34px",
-              }}
-            >
-              Ray&apos;snotes
+            <h1 style={styles.logo}>
+              Ray&apos;sNotes
             </h1>
 
-            <p
-              style={{
-                margin: "5px 0 0",
-                color: "#bbbbbb",
-              }}
-            >
+            <p style={styles.tagline}>
               Music, videos, stories and original content
             </p>
           </div>
 
-          <div
-            style={{
-              display: "flex",
-              gap: "10px",
-              alignItems: "center",
-              flexWrap: "wrap",
-            }}
-          >
+          <nav style={styles.navigation}>
+            <a
+              href="/copyright"
+              style={styles.copyrightButton}
+            >
+              © Copyright Center
+            </a>
+
             <button
               type="button"
               onClick={handleSubscribe}
               style={{
-                border: "none",
-                borderRadius: "9px",
-                padding: "12px 18px",
-                backgroundColor: subscribed ? "#444444" : "#ff3b30",
-                color: "#ffffff",
-                fontSize: "16px",
-                fontWeight: "bold",
-                cursor: "pointer",
+                ...styles.subscribeButton,
+                backgroundColor: subscribed
+                  ? "#444444"
+                  : "#ff3b30",
               }}
             >
               {subscribed ? "Subscribed" : "Subscribe"} ·{" "}
@@ -317,96 +304,42 @@ export default function HomePage() {
               href={STRIPE_PAYMENT_LINK}
               target="_blank"
               rel="noopener noreferrer"
-              style={{
-                display: "inline-block",
-                borderRadius: "9px",
-                padding: "12px 18px",
-                backgroundColor: "#635bff",
-                color: "#ffffff",
-                textDecoration: "none",
-                fontSize: "16px",
-                fontWeight: "bold",
-              }}
+              style={styles.paymentButton}
             >
               Paid Subscription
             </a>
-          </div>
+          </nav>
         </div>
       </header>
 
       {message && (
-        <div
-          style={{
-            position: "fixed",
-            top: "95px",
-            left: "50%",
-            zIndex: 100,
-            transform: "translateX(-50%)",
-            padding: "12px 18px",
-            borderRadius: "8px",
-            backgroundColor: "#ffffff",
-            color: "#111111",
-            fontWeight: "bold",
-            boxShadow: "0 8px 25px rgba(0,0,0,0.45)",
-          }}
-        >
-          {message}
-        </div>
+        <div style={styles.message}>{message}</div>
       )}
 
-      <section
-        style={{
-          maxWidth: "900px",
-          margin: "0 auto",
-          padding: "55px 20px 25px",
-          textAlign: "center",
-        }}
-      >
-        <h2
-          style={{
-            margin: 0,
-            fontSize: "clamp(34px, 7vw, 56px)",
-          }}
-        >
-          Welcome to Ray&apos;snotes
+      <section style={styles.welcome}>
+        <h2 style={styles.welcomeHeading}>
+          Welcome to Ray&apos;sNotes
         </h2>
 
-        <p
-          style={{
-            maxWidth: "720px",
-            margin: "18px auto 0",
-            color: "#cccccc",
-            fontSize: "19px",
-            lineHeight: 1.6,
-          }}
-        >
-          Watch original music, videos, stories and entertainment from
-          Ray&apos;snotes.
+        <p style={styles.welcomeText}>
+          Watch original music, videos, stories and
+          entertainment from Ray&apos;sNotes.
         </p>
+
+        <a
+          href="/copyright"
+          style={styles.largeCopyrightButton}
+        >
+          © Open Copyright Center
+        </a>
       </section>
 
-      <section
-        style={{
-          maxWidth: "1150px",
-          margin: "0 auto",
-          padding: "25px 20px",
-          display: "grid",
-          gridTemplateColumns:
-            "repeat(auto-fit, minmax(min(100%, 320px), 1fr))",
-          gap: "26px",
-        }}
-      >
+      <section style={styles.videoGrid}>
         {videos.map((video) => (
           <article
             id={`video-${video.id}`}
             key={video.id}
-            style={{
-              overflow: "hidden",
-              border: "1px solid #303030",
-              borderRadius: "15px",
-              backgroundColor: "#181818",
-              boxShadow: "0 12px 35px rgba(0,0,0,0.4)",
-            }}
+            style={styles.videoCard}
           >
             <video
               controls
@@ -414,92 +347,66 @@ export default function HomePage() {
               playsInline
               preload="metadata"
               onPlay={() => handleVideoPlay(video.id)}
-              style={{
-                display: "block",
-                width: "100%",
-                aspectRatio: "16 / 9",
-                backgroundColor: "#000000",
-              }}
+              style={styles.video}
             >
-              <source src={video.src} type="video/mp4" />
+              <source
+                src={video.src}
+                type="video/mp4"
+              />
+
               Your browser does not support this video.
             </video>
 
-            <div style={{ padding: "18px" }}>
-              <h3
-                style={{
-                  margin: "0 0 8px",
-                  fontSize: "24px",
-                }}
-              >
+            <div style={styles.videoBody}>
+              <h3 style={styles.videoTitle}>
                 {video.title}
               </h3>
 
-              <p
-                style={{
-                  margin: "0 0 15px",
-                  minHeight: "44px",
-                  color: "#bbbbbb",
-                  lineHeight: 1.5,
-                }}
-              >
+              <p style={styles.videoDescription}>
                 {video.description}
               </p>
 
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  gap: "12px",
-                  marginBottom: "15px",
-                  color: "#dddddd",
-                  fontWeight: "bold",
-                }}
-              >
-                <span>{views[video.id] ?? 0} views</span>
-                <span>{likes[video.id] ?? 0} likes</span>
+              <div style={styles.videoStats}>
+                <span>
+                  {views[video.id] ?? 0} views
+                </span>
+
+                <span>
+                  {likes[video.id] ?? 0} likes
+                </span>
               </div>
 
               <button
                 type="button"
                 onClick={() => handleLike(video.id)}
                 style={{
-                  width: "100%",
-                  marginBottom: "10px",
-                  border: "none",
-                  borderRadius: "8px",
-                  padding: "12px",
-                  backgroundColor: likedVideos[video.id]
-                    ? "#ff3b30"
-                    : "#333333",
-                  color: "#ffffff",
-                  fontSize: "16px",
-                  fontWeight: "bold",
-                  cursor: "pointer",
+                  ...styles.likeButton,
+                  backgroundColor:
+                    likedVideos[video.id]
+                      ? "#ff3b30"
+                      : "#333333",
                 }}
               >
-                {likedVideos[video.id] ? "♥ Liked" : "♡ Like"}
+                {likedVideos[video.id]
+                  ? "♥ Liked"
+                  : "♡ Like"}
               </button>
 
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(2, 1fr)",
-                  gap: "9px",
-                }}
-              >
+              <div style={styles.shareGrid}>
                 <button
                   type="button"
                   onClick={() => nativeShare(video)}
-                  style={shareButtonStyle}
+                  style={styles.shareButton}
                 >
                   Share
                 </button>
 
                 <button
                   type="button"
-                  onClick={() => shareToFacebook(video.id)}
-                  style={shareButtonStyle}
+                  onClick={() =>
+                    shareToFacebook(video.id)
+                  }
+                  style={styles.shareButton}
                 >
                   Facebook
                 </button>
@@ -507,24 +414,28 @@ export default function HomePage() {
                 <button
                   type="button"
                   onClick={() => shareToX(video)}
-                  style={shareButtonStyle}
+                  style={styles.shareButton}
                 >
                   X
                 </button>
 
                 <button
                   type="button"
-                  onClick={() => copyVideoLink(video.id)}
-                  style={shareButtonStyle}
+                  onClick={() =>
+                    copyVideoLink(video.id)
+                  }
+                  style={styles.shareButton}
                 >
                   Copy for TikTok
                 </button>
 
                 <button
                   type="button"
-                  onClick={() => copyVideoLink(video.id)}
+                  onClick={() =>
+                    copyVideoLink(video.id)
+                  }
                   style={{
-                    ...shareButtonStyle,
+                    ...styles.shareButton,
                     gridColumn: "1 / -1",
                   }}
                 >
@@ -536,68 +447,304 @@ export default function HomePage() {
         ))}
       </section>
 
-      <section
-        style={{
-          maxWidth: "800px",
-          margin: "30px auto 0",
-          padding: "35px 20px",
-          textAlign: "center",
-        }}
-      >
-        <h2 style={{ marginTop: 0 }}>Support Ray&apos;snotes</h2>
+      <section style={styles.copyrightPanel}>
+        <div style={styles.copyrightIcon}>©</div>
 
-        <p
-          style={{
-            color: "#cccccc",
-            lineHeight: 1.6,
-          }}
+        <h2 style={styles.copyrightHeading}>
+          Ray&apos;sNotes Copyright Center
+        </h2>
+
+        <p style={styles.copyrightText}>
+          Create a private record and digital
+          fingerprint for your original music, writing,
+          artwork, photography, video, software, or
+          other creative work.
+        </p>
+
+        <a
+          href="/copyright"
+          style={styles.copyrightPanelButton}
         >
-          Become a paid subscriber and help support new music, videos
-          and original content.
+          Create a Creation Record
+        </a>
+      </section>
+
+      <section style={styles.supportPanel}>
+        <h2>Support Ray&apos;sNotes</h2>
+
+        <p style={styles.supportText}>
+          Become a paid subscriber and help support new
+          music, videos and original content.
         </p>
 
         <a
           href={STRIPE_PAYMENT_LINK}
           target="_blank"
           rel="noopener noreferrer"
-          style={{
-            display: "inline-block",
-            marginTop: "10px",
-            borderRadius: "10px",
-            padding: "15px 25px",
-            backgroundColor: "#635bff",
-            color: "#ffffff",
-            textDecoration: "none",
-            fontSize: "18px",
-            fontWeight: "bold",
-          }}
+          style={styles.largePaymentButton}
         >
           Subscribe with Stripe
         </a>
       </section>
 
-      <footer
-        style={{
-          marginTop: "45px",
-          padding: "30px 20px",
-          borderTop: "1px solid #292929",
-          color: "#999999",
-          textAlign: "center",
-        }}
-      >
-        © {new Date().getFullYear()} Ray&apos;snotes. All rights
-        reserved.
+      <footer style={styles.footer}>
+        © {new Date().getFullYear()} Ray&apos;sNotes. All
+        rights reserved.
       </footer>
     </main>
   );
 }
 
-const shareButtonStyle = {
-  border: "none",
-  borderRadius: "8px",
-  padding: "10px",
-  backgroundColor: "#303030",
-  color: "#ffffff",
-  fontWeight: "bold",
-  cursor: "pointer",
-} as const; 
+const styles: Record<string, React.CSSProperties> = {
+  page: {
+    minHeight: "100vh",
+    backgroundColor: "#080808",
+    color: "#ffffff",
+    fontFamily: "Arial, Helvetica, sans-serif",
+  },
+  header: {
+    position: "sticky",
+    top: 0,
+    zIndex: 50,
+    padding: "18px 20px",
+    backgroundColor: "rgba(15,15,15,0.96)",
+    borderBottom: "1px solid #333333",
+    backdropFilter: "blur(10px)",
+  },
+  headerInner: {
+    width: "100%",
+    maxWidth: 1150,
+    margin: "0 auto",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 18,
+    flexWrap: "wrap",
+  },
+  logo: {
+    margin: 0,
+    color: "#ff3b30",
+    fontSize: 34,
+  },
+  tagline: {
+    margin: "5px 0 0",
+    color: "#bbbbbb",
+  },
+  navigation: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    flexWrap: "wrap",
+  },
+  copyrightButton: {
+    display: "inline-block",
+    padding: "11px 16px",
+    backgroundColor: "#35dc7b",
+    color: "#111111",
+    border: "3px solid #ffffff",
+    borderRadius: 9,
+    textDecoration: "none",
+    fontSize: 16,
+    fontWeight: 900,
+  },
+  subscribeButton: {
+    padding: "12px 18px",
+    color: "#ffffff",
+    border: "none",
+    borderRadius: 9,
+    fontSize: 16,
+    fontWeight: "bold",
+    cursor: "pointer",
+  },
+  paymentButton: {
+    display: "inline-block",
+    padding: "12px 18px",
+    backgroundColor: "#635bff",
+    color: "#ffffff",
+    borderRadius: 9,
+    textDecoration: "none",
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  message: {
+    position: "fixed",
+    top: 95,
+    left: "50%",
+    zIndex: 100,
+    transform: "translateX(-50%)",
+    padding: "12px 18px",
+    backgroundColor: "#ffffff",
+    color: "#111111",
+    borderRadius: 8,
+    fontWeight: "bold",
+    boxShadow: "0 8px 25px rgba(0,0,0,0.45)",
+  },
+  welcome: {
+    maxWidth: 900,
+    margin: "0 auto",
+    padding: "55px 20px 30px",
+    textAlign: "center",
+  },
+  welcomeHeading: {
+    margin: 0,
+    fontSize: "clamp(34px, 7vw, 56px)",
+  },
+  welcomeText: {
+    maxWidth: 720,
+    margin: "18px auto",
+    color: "#cccccc",
+    fontSize: 19,
+    lineHeight: 1.6,
+  },
+  largeCopyrightButton: {
+    display: "inline-block",
+    padding: "14px 22px",
+    backgroundColor: "#35dc7b",
+    color: "#111111",
+    border: "3px solid #ffffff",
+    borderRadius: 11,
+    textDecoration: "none",
+    fontSize: 18,
+    fontWeight: 900,
+  },
+  videoGrid: {
+    maxWidth: 1150,
+    margin: "0 auto",
+    padding: "25px 20px",
+    display: "grid",
+    gridTemplateColumns:
+      "repeat(auto-fit, minmax(min(100%, 320px), 1fr))",
+    gap: 26,
+  },
+  videoCard: {
+    overflow: "hidden",
+    backgroundColor: "#181818",
+    border: "1px solid #303030",
+    borderRadius: 15,
+    boxShadow: "0 12px 35px rgba(0,0,0,0.4)",
+  },
+  video: {
+    display: "block",
+    width: "100%",
+    aspectRatio: "16 / 9",
+    backgroundColor: "#000000",
+  },
+  videoBody: {
+    padding: 18,
+  },
+  videoTitle: {
+    margin: "0 0 8px",
+    fontSize: 24,
+  },
+  videoDescription: {
+    margin: "0 0 15px",
+    minHeight: 44,
+    color: "#bbbbbb",
+    lineHeight: 1.5,
+  },
+  videoStats: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: 12,
+    marginBottom: 15,
+    color: "#dddddd",
+    fontWeight: "bold",
+  },
+  likeButton: {
+    width: "100%",
+    marginBottom: 10,
+    padding: 12,
+    color: "#ffffff",
+    border: "none",
+    borderRadius: 8,
+    fontSize: 16,
+    fontWeight: "bold",
+    cursor: "pointer",
+  },
+  shareGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(2, 1fr)",
+    gap: 9,
+  },
+  shareButton: {
+    padding: 10,
+    backgroundColor: "#303030",
+    color: "#ffffff",
+    border: "none",
+    borderRadius: 8,
+    fontWeight: "bold",
+    cursor: "pointer",
+  },
+  copyrightPanel: {
+    maxWidth: 900,
+    margin: "35px auto",
+    padding: "30px 20px",
+    background:
+      "linear-gradient(135deg, #172a67, #651c88)",
+    border: "4px solid #35dc7b",
+    borderRadius: 20,
+    textAlign: "center",
+  },
+  copyrightIcon: {
+    display: "grid",
+    placeItems: "center",
+    width: 80,
+    height: 80,
+    margin: "0 auto 15px",
+    backgroundColor: "#35dc7b",
+    color: "#111111",
+    border: "4px solid #ffffff",
+    borderRadius: "50%",
+    fontSize: 54,
+    fontWeight: 900,
+  },
+  copyrightHeading: {
+    margin: "0 0 12px",
+    fontSize: 32,
+  },
+  copyrightText: {
+    maxWidth: 700,
+    margin: "0 auto 18px",
+    lineHeight: 1.6,
+    fontSize: 17,
+    fontWeight: 700,
+  },
+  copyrightPanelButton: {
+    display: "inline-block",
+    padding: "13px 20px",
+    backgroundColor: "#ffffff",
+    color: "#111111",
+    border: "3px solid #111111",
+    borderRadius: 11,
+    textDecoration: "none",
+    fontWeight: 900,
+  },
+  supportPanel: {
+    maxWidth: 800,
+    margin: "30px auto 0",
+    padding: "35px 20px",
+    textAlign: "center",
+  },
+  supportText: {
+    color: "#cccccc",
+    lineHeight: 1.6,
+  },
+  largePaymentButton: {
+    display: "inline-block",
+    marginTop: 10,
+    padding: "15px 25px",
+    backgroundColor: "#635bff",
+    color: "#ffffff",
+    borderRadius: 10,
+    textDecoration: "none",
+    fontSize: 18,
+    fontWeight: "bold",
+  },
+  footer: {
+    marginTop: 45,
+    padding: "30px 20px",
+    borderTop: "1px solid #292929",
+    color: "#999999",
+    textAlign: "center",
+  },
+}; 
