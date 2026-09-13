@@ -480,7 +480,42 @@ https://www.copyright.gov/registration/
         {notice && <p className="notice">{notice}</p>}
       </section>
 
-      <section className="records">
+ <section
+        style={{
+          maxWidth: "1050px",
+          margin: "0 auto 24px",
+          padding: "28px",
+          color: "#111111",
+          textAlign: "center",
+          background: "#fff4d6",
+          border: "3px solid #ffae24",
+          borderRadius: "22px",
+        }}
+      >
+        <h2>Need Help Preparing an Official Application?</h2>
+
+        <p>
+          Use our guided questionnaire to organize your
+          information and download a filing summary.
+        </p>
+
+        <Link
+          href="/copyright/apply"
+          style={{
+            display: "inline-block",
+            padding: "16px 22px",
+            color: "#ffffff",
+            fontWeight: 900,
+            textDecoration: "none",
+            background: "#1769e0",
+            borderRadius: "12px",
+          }}
+        >
+          Start Assisted Copyright Application
+        </Link>
+      </section> 
+     
+<section className="records">
         <h2>My Saved Creation Records</h2>
 
         {records.length === 0 ? (
