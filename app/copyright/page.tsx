@@ -1,858 +1,795 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
+import type { FormEvent } from "react";
 
-type CopyrightRecord = {
+const PAYMENT_LINK =
+  "https://buy.stripe.com/3cI6oHbR8dkjcw21Dz2Nq05";
+
+const RECORDS_KEY = "raysnotes-copyright-records";
+const CREDIT_KEY = "raysnotes-copyright-payment-credit";
+
+type CreationRecord = {
   id: string;
-  creatorName: string;
+  creator: string;
   email: string;
-  workTitle: string;
-  workType: string;
-  description: string;
+  title: string;
+  type: string;
   creationDate: string;
+  description: string;
   fileName: string;
-  fileSize: number;
-  fingerprint: string;
+  fileSize: number | null;
+  fileHash: string;
+  recordHash: string;
   recordedAt: string;
 };
 
-const STORAGE_KEY = "raysnotes-copyright-records";
+function toHex(buffer: ArrayBuffer) {
+  return Array.from(new Uint8Array(buffer))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
 
-export default function CopyrightCenterPage() {
-  const [creatorName, setCreatorName] = useState("");
-  const [email, setEmail] = useState("");
-  const [workTitle, setWorkTitle] = useState("");
-  const [workType, setWorkType] = useState(
-    "Song or Music"
+async function createHash(value: string | ArrayBuffer) {
+  const data =
+    typeof value === "string"
+      ? new TextEncoder().encode(value)
+      : value;
+
+  const result = await crypto.subtle.digest("SHA-256", data);
+  return toHex(result);
+}
+
+function safeFileName(value: string) {
+  return (
+    value
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "") || "creation"
   );
-  const [description, setDescription] = useState("");
+}
+
+export default function CopyrightPage() {
+  const [records, setRecords] = useState<CreationRecord[]>([]);
+  const [creator, setCreator] = useState("");
+  const [email, setEmail] = useState("");
+  const [title, setTitle] = useState("");
+  const [workType, setWorkType] = useState("Music");
   const [creationDate, setCreationDate] = useState("");
-  const [selectedFile, setSelectedFile] =
-    useState<File | null>(null);
-  const [records, setRecords] = useState<
-    CopyrightRecord[]
-  >([]);
-  const [message, setMessage] = useState("");
+  const [description, setDescription] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+
+  const [paid, setPaid] = useState(false);
+  const [checking, setChecking] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [notice, setNotice] = useState("");
 
   useEffect(() => {
     try {
-      const savedRecords =
-        localStorage.getItem(STORAGE_KEY);
+      const savedRecords = localStorage.getItem(RECORDS_KEY);
 
       if (savedRecords) {
-        setRecords(JSON.parse(savedRecords));
+        const parsedRecords = JSON.parse(savedRecords);
+
+        if (Array.isArray(parsedRecords)) {
+          setRecords(parsedRecords);
+        }
       }
     } catch {
-      setMessage(
-        "Your saved creation records could not be loaded."
-      );
+      localStorage.removeItem(RECORDS_KEY);
     }
+
+    async function verifyPayment() {
+      const searchParams = new URLSearchParams(
+        window.location.search
+      );
+
+      const sessionId = searchParams.get("session_id");
+
+      if (!sessionId) {
+        const savedCredit = localStorage.getItem(CREDIT_KEY);
+        setPaid(Boolean(savedCredit));
+        setChecking(false);
+        return;
+      }
+
+      setNotice("Verifying your Stripe payment...");
+
+      try {
+        const response = await fetch(
+          `/api/copyright-payment?session_id=${encodeURIComponent(
+            sessionId
+          )}`,
+          {
+            cache: "no-store",
+          }
+        );
+
+        const result = await response.json();
+
+        if (!response.ok || result.paid !== true) {
+          throw new Error(
+            result.error || "Payment could not be verified."
+          );
+        }
+
+        localStorage.setItem(CREDIT_KEY, sessionId);
+        setPaid(true);
+
+        setNotice(
+          "Payment verified. You may create one private creation record."
+        );
+
+        window.history.replaceState({}, "", "/copyright");
+      } catch (error) {
+        setNotice(
+          error instanceof Error
+            ? error.message
+            : "Payment could not be verified."
+        );
+      } finally {
+        setChecking(false);
+      }
+    }
+
+    verifyPayment();
   }, []);
 
-  function createRecordId() {
-    if (
-      typeof crypto !== "undefined" &&
-      typeof crypto.randomUUID === "function"
-    ) {
-      return crypto.randomUUID();
-    }
+  function saveRecords(nextRecords: CreationRecord[]) {
+    setRecords(nextRecords);
 
-    return `RN-${Date.now()}-${Math.random()
-      .toString(36)
-      .slice(2, 10)}`;
-  }
-
-  async function createFingerprint(
-    recordId: string
-  ): Promise<string> {
-    let data: ArrayBuffer;
-
-    if (selectedFile) {
-      data = await selectedFile.arrayBuffer();
-    } else {
-      const recordText = [
-        recordId,
-        creatorName.trim(),
-        email.trim().toLowerCase(),
-        workTitle.trim(),
-        workType,
-        description.trim(),
-        creationDate,
-      ].join("|");
-
-      data = new TextEncoder().encode(
-        recordText
-      ).buffer;
-    }
-
-    const digest = await crypto.subtle.digest(
-      "SHA-256",
-      data
+    localStorage.setItem(
+      RECORDS_KEY,
+      JSON.stringify(nextRecords)
     );
-
-    return Array.from(new Uint8Array(digest))
-      .map((byte) =>
-        byte.toString(16).padStart(2, "0")
-      )
-      .join("");
   }
 
-  async function saveRecord(
-    event: React.FormEvent<HTMLFormElement>
+  async function handleSubmit(
+    event: FormEvent<HTMLFormElement>
   ) {
     event.preventDefault();
 
-    if (
-      !creatorName.trim() ||
-      !workTitle.trim() ||
-      !creationDate
-    ) {
-      setMessage(
-        "Please enter the creator name, work title, and creation date."
+    if (!paid) {
+      setNotice(
+        "Purchase a creation record before using the form."
       );
       return;
     }
 
-    try {
-      setSaving(true);
-      setMessage(
-        "Creating your private creation record..."
+    if (
+      !creator.trim() ||
+      !title.trim() ||
+      !creationDate
+    ) {
+      setNotice(
+        "Creator name, work title, and creation date are required."
       );
+      return;
+    }
 
-      const id = createRecordId();
-      const fingerprint =
-        await createFingerprint(id);
+    setSaving(true);
+    setNotice("");
 
-      const newRecord: CopyrightRecord = {
-        id,
-        creatorName: creatorName.trim(),
+    try {
+      let fileHash = "";
+
+      if (file) {
+        const fileBuffer = await file.arrayBuffer();
+        fileHash = await createHash(fileBuffer);
+      }
+
+      const recordInformation = {
+        id: crypto.randomUUID(),
+        creator: creator.trim(),
         email: email.trim().toLowerCase(),
-        workTitle: workTitle.trim(),
-        workType,
-        description: description.trim(),
+        title: title.trim(),
+        type: workType,
         creationDate,
-        fileName: selectedFile?.name ?? "",
-        fileSize: selectedFile?.size ?? 0,
-        fingerprint,
+        description: description.trim(),
+        fileName: file ? file.name : "",
+        fileSize: file ? file.size : null,
+        fileHash,
         recordedAt: new Date().toISOString(),
       };
 
-      const updatedRecords = [
-        newRecord,
-        ...records,
-      ];
-
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify(updatedRecords)
+      const recordHash = await createHash(
+        JSON.stringify(recordInformation)
       );
 
-      setRecords(updatedRecords);
-      setWorkTitle("");
-      setDescription("");
+      const newRecord: CreationRecord = {
+        ...recordInformation,
+        recordHash,
+      };
+
+      saveRecords([newRecord, ...records]);
+
+      localStorage.removeItem(CREDIT_KEY);
+      setPaid(false);
+
+      setCreator("");
+      setEmail("");
+      setTitle("");
+      setWorkType("Music");
       setCreationDate("");
-      setSelectedFile(null);
+      setDescription("");
+      setFile(null);
 
       const fileInput = document.getElementById(
-        "copyright-file"
+        "work-file"
       ) as HTMLInputElement | null;
 
       if (fileInput) {
         fileInput.value = "";
       }
 
-      setMessage(
+      setNotice(
         "Creation record saved privately on this device."
       );
     } catch {
-      setMessage(
-        "The creation record could not be saved. Please try again."
+      setNotice(
+        "The creation record could not be created."
       );
     } finally {
       setSaving(false);
     }
   }
 
-  function downloadCertificate(
-    record: CopyrightRecord
-  ) {
-    const fileSizeText = record.fileSize
-      ? `${record.fileSize.toLocaleString()} bytes`
-      : "Not available";
+  function downloadRecord(record: CreationRecord) {
+    const recordText = `RAY'SNOTES CREATION RECORD
+================================
 
-    const certificate = [
-      "RAY'SNOTES CREATION RECORD",
-      "==========================",
-      "",
-      `Record ID: ${record.id}`,
-      `Recorded: ${new Date(
-        record.recordedAt
-      ).toLocaleString()}`,
-      "",
-      `Creator: ${record.creatorName}`,
-      `Email: ${record.email || "Not provided"}`,
-      `Work title: ${record.workTitle}`,
-      `Work type: ${record.workType}`,
-      `Creation date: ${record.creationDate}`,
-      `Description: ${
-        record.description || "None"
-      }`,
-      `Original file: ${
-        record.fileName || "Not attached"
-      }`,
-      `File size: ${fileSizeText}`,
-      "",
-      "SHA-256 DIGITAL FINGERPRINT",
-      record.fingerprint,
-      "",
-      "IMPORTANT NOTICE",
-      "This Ray'sNotes creation record documents information entered by the user.",
-      "It is not registration with the United States Copyright Office.",
-      "It does not prove ownership by itself and is not legal advice.",
-      "",
-      "Official copyright registration:",
-      "https://www.copyright.gov/registration/",
-    ].join("\n");
+Record ID: ${record.id}
+Recorded: ${new Date(record.recordedAt).toLocaleString()}
 
-    const blob = new Blob([certificate], {
+Creator: ${record.creator}
+Email: ${record.email || "Not provided"}
+Work title: ${record.title}
+Work type: ${record.type}
+Creation date: ${record.creationDate}
+Description: ${record.description || "None"}
+Original file: ${record.fileName || "Not attached"}
+File size: ${record.fileSize ?? "Not available"}
+
+FILE SHA-256 FINGERPRINT
+${record.fileHash || "No file attached"}
+
+RECORD SHA-256 FINGERPRINT
+${record.recordHash}
+
+IMPORTANT NOTICE
+This record documents information entered by the user.
+It is not registration with the United States Copyright Office.
+It does not prove copyright ownership by itself.
+It is not legal advice.
+
+Official registration:
+https://www.copyright.gov/registration/
+`;
+
+    const blob = new Blob([recordText], {
       type: "text/plain;charset=utf-8",
     });
 
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
+    const downloadUrl = URL.createObjectURL(blob);
+    const downloadLink = document.createElement("a");
 
-    link.href = url;
-    link.download = `${record.workTitle
-      .replace(/[^a-z0-9]+/gi, "-")
-      .replace(/^-|-$/g, "")
-      .toLowerCase()}-creation-record.txt`;
+    downloadLink.href = downloadUrl;
+    downloadLink.download = `${safeFileName(
+      record.title
+    )}-creation-record.txt`;
 
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
+    downloadLink.click();
+    URL.revokeObjectURL(downloadUrl);
   }
 
   function deleteRecord(recordId: string) {
     const confirmed = window.confirm(
-      "Delete this creation record from this device?"
+      "Delete this private record from this browser?"
     );
 
     if (!confirmed) {
       return;
     }
 
-    const updatedRecords = records.filter(
+    const remainingRecords = records.filter(
       (record) => record.id !== recordId
     );
 
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify(updatedRecords)
-    );
-
-    setRecords(updatedRecords);
-    setMessage("Creation record deleted.");
+    saveRecords(remainingRecords);
   }
 
   return (
-    <main style={styles.page}>
-      <div style={styles.container}>
-        <nav style={styles.navigation}>
-          <a href="/" style={styles.homeButton}>
-            ← Ray&apos;sNotes Home
-          </a>
-        </nav>
+    <main className="page">
+      <Link className="homeButton" href="/">
+        ← Ray&apos;sNotes Home
+      </Link>
 
-        <header style={styles.hero}>
-          <div style={styles.copyrightIcon}>
-            ©
-          </div>
+      <section className="hero">
+        <div className="copyrightSymbol">©</div>
 
-          <div>
-            <p style={styles.eyebrow}>
-              PROTECT YOUR CREATIVE WORK
-            </p>
-
-            <h1 style={styles.heading}>
-              Ray&apos;sNotes Copyright Center
-            </h1>
-
-            <p style={styles.subtitle}>
-              Create a private record of your
-              original writing, music, artwork,
-              photography, video, software, or
-              other creative work.
-            </p>
-          </div>
-        </header>
-
-        <section style={styles.notice}>
-          <h2 style={styles.noticeHeading}>
-            Important Copyright Notice
-          </h2>
-
-          <p style={styles.noticeText}>
-            A Ray&apos;sNotes Creation Record is
-            not a registration with the United
-            States Copyright Office and does not
-            replace legal advice. This tool records
-            the information you provide and creates
-            a digital fingerprint for your work.
+        <div>
+          <p className="eyebrow">
+            PROTECT YOUR CREATIVE WORK
           </p>
 
-          <a
-            href="https://www.copyright.gov/registration/"
-            target="_blank"
-            rel="noreferrer"
-            style={styles.officialLink}
-          >
-            Visit the U.S. Copyright Office ↗
-          </a>
-        </section>
+          <h1>Ray&apos;sNotes Copyright Center</h1>
 
-        <section style={styles.formPanel}>
-          <h2 style={styles.sectionHeading}>
-            Create a Creation Record
-          </h2>
-
-          <p style={styles.privateMessage}>
-            🔒 Your information and saved records
-            stay in this browser on this device.
+          <p>
+            Create a private record and digital fingerprint
+            for your original work.
           </p>
+        </div>
+      </section>
 
-          <form onSubmit={saveRecord}>
-            <div style={styles.formGrid}>
-              <label style={styles.label}>
-                Creator or legal name *
-                <input
-                  type="text"
-                  value={creatorName}
-                  onChange={(event) =>
-                    setCreatorName(
-                      event.target.value
-                    )
-                  }
-                  placeholder="Enter the creator's name"
-                  style={styles.input}
-                  required
-                />
-              </label>
+      <section className="warning">
+        <h2>Important Copyright Notice</h2>
 
-              <label style={styles.label}>
-                Email address
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(event) =>
-                    setEmail(event.target.value)
-                  }
-                  placeholder="Enter an email address"
-                  style={styles.input}
-                />
-              </label>
+        <p>
+          A Ray&apos;sNotes creation record is not
+          registration with the United States Copyright
+          Office and does not prove ownership by itself.
+        </p>
 
-              <label style={styles.label}>
-                Work title *
-                <input
-                  type="text"
-                  value={workTitle}
-                  onChange={(event) =>
-                    setWorkTitle(
-                      event.target.value
-                    )
-                  }
-                  placeholder="Enter the title of your work"
-                  style={styles.input}
-                  required
-                />
-              </label>
+        <a
+          href="https://www.copyright.gov/registration/"
+          target="_blank"
+          rel="noreferrer"
+        >
+          Visit the U.S. Copyright Office ↗
+        </a>
+      </section>
 
-              <label style={styles.label}>
-                Type of work *
-                <select
-                  value={workType}
-                  onChange={(event) =>
-                    setWorkType(event.target.value)
-                  }
-                  style={styles.input}
-                >
-                  <option>Song or Music</option>
-                  <option>Written Work</option>
-                  <option>Photograph</option>
-                  <option>Artwork</option>
-                  <option>Video</option>
-                  <option>Software</option>
-                  <option>
-                    Other Creative Work
-                  </option>
-                </select>
-              </label>
+      <section className="payment">
+        <h2>Creation Record — $9.99</h2>
 
-              <label style={styles.label}>
-                Date created *
-                <input
-                  type="date"
-                  value={creationDate}
-                  onChange={(event) =>
-                    setCreationDate(
-                      event.target.value
-                    )
-                  }
-                  style={styles.input}
-                  required
-                />
-              </label>
+        <p>
+          One payment creates one private creation record.
+        </p>
 
-              <label style={styles.label}>
-                Original file
-                <input
-                  id="copyright-file"
-                  type="file"
-                  onChange={(event) =>
-                    setSelectedFile(
-                      event.target.files?.[0] ??
-                        null
-                    )
-                  }
-                  style={styles.fileInput}
-                />
+        {checking ? (
+          <p>Checking payment status...</p>
+        ) : paid ? (
+          <p className="success">
+            ✓ Payment verified. The form is unlocked.
+          </p>
+        ) : (
+          <a className="buyButton" href={PAYMENT_LINK}>
+            Purchase Creation Record — $9.99
+          </a>
+        )}
+      </section>
 
-                <span style={styles.helpText}>
-                  The file is read only to create
-                  its digital fingerprint. This
-                  version does not upload the file.
-                </span>
-              </label>
-            </div>
+      <section
+        className={`formCard ${paid ? "" : "locked"}`}
+      >
+        <h2>Create a Private Creation Record</h2>
 
-            <label style={styles.label}>
-              Description of the work
-              <textarea
-                value={description}
+        {!paid && (
+          <p className="lockMessage">
+            🔒 Complete payment to unlock this form.
+          </p>
+        )}
+
+        <form onSubmit={handleSubmit}>
+          <div className="formGrid">
+            <label>
+              Creator or legal name
+              <input
+                value={creator}
                 onChange={(event) =>
-                  setDescription(
-                    event.target.value
-                  )
+                  setCreator(event.target.value)
                 }
-                placeholder="Describe the work and how it was created"
-                rows={5}
-                style={styles.textarea}
+                disabled={!paid}
+                required
               />
             </label>
 
-            <button
-              type="submit"
-              disabled={saving}
-              style={{
-                ...styles.saveButton,
-                opacity: saving ? 0.65 : 1,
-              }}
-            >
-              {saving
-                ? "Creating Record..."
-                : "Create Private Record"}
-            </button>
+            <label>
+              Email address (optional)
+              <input
+                type="email"
+                value={email}
+                onChange={(event) =>
+                  setEmail(event.target.value)
+                }
+                disabled={!paid}
+              />
+            </label>
 
-            {message && (
-              <p style={styles.message}>
-                {message}
-              </p>
-            )}
-          </form>
-        </section>
+            <label>
+              Work title
+              <input
+                value={title}
+                onChange={(event) =>
+                  setTitle(event.target.value)
+                }
+                disabled={!paid}
+                required
+              />
+            </label>
 
-        <section style={styles.recordsPanel}>
-          <h2 style={styles.sectionHeading}>
-            My Saved Creation Records
-          </h2>
+            <label>
+              Work type
+              <select
+                value={workType}
+                onChange={(event) =>
+                  setWorkType(event.target.value)
+                }
+                disabled={!paid}
+              >
+                <option>Music</option>
+                <option>Video</option>
+                <option>Writing</option>
+                <option>Photography</option>
+                <option>Artwork</option>
+                <option>Software</option>
+                <option>Other Creative Work</option>
+              </select>
+            </label>
 
-          {records.length === 0 ? (
-            <div style={styles.empty}>
-              <div style={styles.emptyIcon}>
-                📄
-              </div>
+            <label>
+              Creation date
+              <input
+                type="date"
+                value={creationDate}
+                onChange={(event) =>
+                  setCreationDate(event.target.value)
+                }
+                disabled={!paid}
+                required
+              />
+            </label>
 
-              <h3>No creation records yet</h3>
+            <label>
+              Original file (optional)
+              <input
+                id="work-file"
+                type="file"
+                onChange={(event) =>
+                  setFile(event.target.files?.[0] || null)
+                }
+                disabled={!paid}
+              />
+            </label>
+          </div>
+
+          <label>
+            Description
+            <textarea
+              value={description}
+              onChange={(event) =>
+                setDescription(event.target.value)
+              }
+              disabled={!paid}
+              rows={5}
+            />
+          </label>
+
+          <button
+            type="submit"
+            disabled={!paid || saving}
+          >
+            {saving
+              ? "Creating record..."
+              : "Create Private Record"}
+          </button>
+        </form>
+
+        {notice && <p className="notice">{notice}</p>}
+      </section>
+
+      <section className="records">
+        <h2>My Saved Creation Records</h2>
+
+        {records.length === 0 ? (
+          <p>
+            No creation records are saved in this browser
+            yet.
+          </p>
+        ) : (
+          records.map((record) => (
+            <article className="record" key={record.id}>
+              <span className="recordType">
+                {record.type}
+              </span>
+
+              <h3>{record.title}</h3>
+              <h4>Created by {record.creator}</h4>
 
               <p>
-                Complete the form above to create
-                your first private record.
+                Creation date: {record.creationDate}
               </p>
-            </div>
-          ) : (
-            <div style={styles.recordGrid}>
-              {records.map((record) => (
-                <article
-                  key={record.id}
-                  style={styles.recordCard}
+
+              <p>
+                Recorded:{" "}
+                {new Date(
+                  record.recordedAt
+                ).toLocaleString()}
+              </p>
+
+              <div className="hash">
+                <strong>
+                  SHA-256 record fingerprint
+                </strong>
+
+                <code>{record.recordHash}</code>
+              </div>
+
+              <div className="actions">
+                <button
+                  type="button"
+                  onClick={() => downloadRecord(record)}
                 >
-                  <span style={styles.workBadge}>
-                    {record.workType}
-                  </span>
+                  Download Record
+                </button>
 
-                  <h3 style={styles.recordTitle}>
-                    {record.workTitle}
-                  </h3>
+                <button
+                  type="button"
+                  className="deleteButton"
+                  onClick={() => deleteRecord(record.id)}
+                >
+                  Delete
+                </button>
+              </div>
+            </article>
+          ))
+        )}
+      </section>
 
-                  <p style={styles.recordCreator}>
-                    Created by {record.creatorName}
-                  </p>
+      <style jsx>{`
+        .page {
+          min-height: 100vh;
+          padding: 28px;
+          color: white;
+          font-family: Arial, sans-serif;
+          background: linear-gradient(
+            145deg,
+            #050816,
+            #14245b
+          );
+        }
 
-                  <p style={styles.recordDetail}>
-                    Creation date:{" "}
-                    {record.creationDate}
-                  </p>
+        .homeButton,
+        .buyButton,
+        .warning a {
+          display: inline-block;
+          color: white;
+          font-weight: 800;
+          text-decoration: none;
+          border-radius: 12px;
+        }
 
-                  <p style={styles.recordDetail}>
-                    Recorded:{" "}
-                    {new Date(
-                      record.recordedAt
-                    ).toLocaleString()}
-                  </p>
+        .homeButton {
+          margin-bottom: 26px;
+          padding: 14px 20px;
+          border: 2px solid white;
+        }
 
-                  {record.fileName && (
-                    <p style={styles.recordDetail}>
-                      File: {record.fileName}
-                    </p>
-                  )}
+        .hero,
+        .warning,
+        .payment,
+        .formCard,
+        .records {
+          max-width: 1050px;
+          margin: 0 auto 24px;
+          padding: 28px;
+          border-radius: 22px;
+        }
 
-                  <div
-                    style={styles.fingerprintBox}
-                  >
-                    <strong>
-                      SHA-256 digital fingerprint
-                    </strong>
+        .hero {
+          display: flex;
+          align-items: center;
+          gap: 24px;
+          border: 3px solid #20df78;
+          background: linear-gradient(
+            120deg,
+            #102d64,
+            #32175c
+          );
+        }
 
-                    <code
-                      style={styles.fingerprint}
-                    >
-                      {record.fingerprint}
-                    </code>
-                  </div>
+        .copyrightSymbol {
+          display: grid;
+          width: 105px;
+          height: 105px;
+          flex-shrink: 0;
+          place-items: center;
+          color: #07111f;
+          font-size: 64px;
+          background: #20df78;
+          border: 7px solid white;
+          border-radius: 50%;
+        }
 
-                  <div style={styles.buttonRow}>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        downloadCertificate(
-                          record
-                        )
-                      }
-                      style={
-                        styles.downloadButton
-                      }
-                    >
-                      Download Record
-                    </button>
+        .eyebrow {
+          color: #32f98c;
+          font-weight: 900;
+          letter-spacing: 3px;
+        }
 
-                    <button
-                      type="button"
-                      onClick={() =>
-                        deleteRecord(record.id)
-                      }
-                      style={styles.deleteButton}
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </article>
-              ))}
-            </div>
-          )}
-        </section>
+        h1 {
+          margin: 8px 0;
+          font-size: clamp(34px, 6vw, 70px);
+        }
 
-        <footer style={styles.footer}>
-          © 2026 Ray&apos;sNotes Copyright Center
-        </footer>
-      </div>
+        h2 {
+          margin-top: 0;
+          font-size: 32px;
+        }
+
+        .warning {
+          color: #111111;
+          background: white;
+          border: 3px solid #ff9d20;
+        }
+
+        .warning a {
+          padding: 13px 18px;
+          background: #1769e0;
+        }
+
+        .payment {
+          color: #07111f;
+          text-align: center;
+          background: #ecfeff;
+          border: 3px solid #1dd3c8;
+        }
+
+        .buyButton {
+          padding: 18px 25px;
+          color: #07111f;
+          font-size: 20px;
+          background: #20d978;
+          border: 3px solid white;
+          box-shadow: 0 0 0 2px #07111f;
+        }
+
+        .success {
+          color: #087f3e;
+          font-weight: 900;
+        }
+
+        .formCard,
+        .records {
+          color: #111111;
+          background: white;
+          border: 3px solid #1dd3c8;
+        }
+
+        .locked {
+          border-color: #94a3b8;
+        }
+
+        .lockMessage,
+        .notice {
+          padding: 14px;
+          color: #064b89;
+          font-weight: 800;
+          background: #e6f4ff;
+          border-radius: 10px;
+        }
+
+        .formGrid {
+          display: grid;
+          grid-template-columns: repeat(
+            auto-fit,
+            minmax(250px, 1fr)
+          );
+          gap: 18px;
+        }
+
+        label {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          margin-bottom: 18px;
+          font-weight: 800;
+        }
+
+        input,
+        select,
+        textarea {
+          padding: 13px;
+          font: inherit;
+          background: white;
+          border: 2px solid #334155;
+          border-radius: 10px;
+        }
+
+        input:disabled,
+        select:disabled,
+        textarea:disabled {
+          background: #e5e7eb;
+        }
+
+        button {
+          padding: 15px 20px;
+          color: white;
+          font: inherit;
+          font-weight: 900;
+          cursor: pointer;
+          background: #0aa85b;
+          border: 0;
+          border-radius: 10px;
+        }
+
+        button:disabled {
+          cursor: not-allowed;
+          background: #94a3b8;
+        }
+
+        .record {
+          margin-top: 18px;
+          padding: 22px;
+          border: 2px solid #334155;
+          border-radius: 18px;
+        }
+
+        .recordType {
+          display: inline-block;
+          padding: 8px 14px;
+          color: white;
+          font-weight: 900;
+          background: #4338ca;
+          border-radius: 999px;
+        }
+
+        .record h3 {
+          margin: 14px 0 6px;
+          font-size: 30px;
+        }
+
+        .record h4 {
+          margin: 0 0 15px;
+          color: #075fbd;
+          font-size: 20px;
+        }
+
+        .hash {
+          padding: 14px;
+          background: #eef2ff;
+          border: 1px solid #64748b;
+          border-radius: 12px;
+        }
+
+        .hash code {
+          display: block;
+          margin-top: 8px;
+          overflow-wrap: anywhere;
+        }
+
+        .actions {
+          display: flex;
+          gap: 12px;
+          margin-top: 18px;
+        }
+
+        .deleteButton {
+          background: #c62828;
+        }
+
+        @media (max-width: 600px) {
+          .page {
+            padding: 15px;
+          }
+
+          .hero {
+            display: block;
+          }
+
+          .copyrightSymbol {
+            width: 75px;
+            height: 75px;
+            font-size: 45px;
+          }
+
+          h2 {
+            font-size: 26px;
+          }
+        }
+      `}</style>
     </main>
   );
-}
-
-const styles: Record<
-  string,
-  React.CSSProperties
-> = {
-  page: {
-    minHeight: "100vh",
-    padding: "24px 16px 50px",
-    color: "#ffffff",
-    background:
-      "linear-gradient(135deg, #07111f, #14254d, #30105c)",
-    fontFamily: "Arial, sans-serif",
-  },
-  container: {
-    width: "min(1100px, 100%)",
-    margin: "0 auto",
-  },
-  navigation: {
-    marginBottom: 22,
-  },
-  homeButton: {
-    display: "inline-block",
-    padding: "11px 18px",
-    color: "#ffffff",
-    border: "3px solid #ffffff",
-    borderRadius: 14,
-    textDecoration: "none",
-    fontWeight: 900,
-  },
-  hero: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 24,
-    padding: "34px 20px",
-    textAlign: "center",
-    border: "4px solid #37d67a",
-    borderRadius: 24,
-    background:
-      "linear-gradient(135deg, #172a67, #651c88)",
-  },
-  copyrightIcon: {
-    display: "grid",
-    placeItems: "center",
-    flex: "0 0 100px",
-    width: 100,
-    height: 100,
-    color: "#111111",
-    background: "#37d67a",
-    border: "5px solid #ffffff",
-    borderRadius: "50%",
-    fontSize: 66,
-    fontWeight: 900,
-  },
-  eyebrow: {
-    margin: "0 0 8px",
-    color: "#7dffad",
-    fontWeight: 900,
-    letterSpacing: 2,
-  },
-  heading: {
-    margin: 0,
-    fontSize: "clamp(36px, 7vw, 66px)",
-  },
-  subtitle: {
-    maxWidth: 720,
-    margin: "14px auto 0",
-    fontSize: 19,
-    lineHeight: 1.5,
-    fontWeight: 700,
-  },
-  notice: {
-    margin: "26px 0",
-    padding: 22,
-    color: "#111111",
-    background: "#fff4cf",
-    border: "4px solid #f5a300",
-    borderRadius: 20,
-  },
-  noticeHeading: {
-    margin: "0 0 10px",
-    fontSize: 27,
-  },
-  noticeText: {
-    margin: "0 0 14px",
-    fontSize: 17,
-    lineHeight: 1.55,
-    fontWeight: 700,
-  },
-  officialLink: {
-    display: "inline-block",
-    padding: "11px 16px",
-    color: "#ffffff",
-    background: "#173e9a",
-    border: "3px solid #111111",
-    borderRadius: 12,
-    textDecoration: "none",
-    fontWeight: 900,
-  },
-  formPanel: {
-    padding: 25,
-    color: "#111111",
-    background: "#ffffff",
-    border: "4px solid #37d67a",
-    borderRadius: 22,
-  },
-  recordsPanel: {
-    marginTop: 30,
-    padding: 25,
-    color: "#111111",
-    background: "#f6f8ff",
-    border: "4px solid #7f55e8",
-    borderRadius: 22,
-  },
-  sectionHeading: {
-    margin: "0 0 12px",
-    fontSize: 32,
-  },
-  privateMessage: {
-    margin: "0 0 22px",
-    padding: 12,
-    color: "#075b30",
-    background: "#dcffea",
-    border: "2px solid #159650",
-    borderRadius: 10,
-    fontWeight: 800,
-  },
-  formGrid: {
-    display: "grid",
-    gridTemplateColumns:
-      "repeat(auto-fit, minmax(260px, 1fr))",
-    gap: 18,
-  },
-  label: {
-    display: "grid",
-    gap: 7,
-    marginBottom: 18,
-    fontWeight: 900,
-  },
-  input: {
-    width: "100%",
-    boxSizing: "border-box",
-    padding: 13,
-    color: "#111111",
-    background: "#ffffff",
-    border: "3px solid #111111",
-    borderRadius: 11,
-    fontSize: 16,
-  },
-  fileInput: {
-    width: "100%",
-    boxSizing: "border-box",
-    padding: 10,
-    color: "#111111",
-    background: "#f3f3f3",
-    border: "3px solid #111111",
-    borderRadius: 11,
-  },
-  helpText: {
-    color: "#555555",
-    fontSize: 13,
-    lineHeight: 1.4,
-    fontWeight: 600,
-  },
-  textarea: {
-    width: "100%",
-    boxSizing: "border-box",
-    padding: 13,
-    color: "#111111",
-    background: "#ffffff",
-    border: "3px solid #111111",
-    borderRadius: 11,
-    fontFamily: "Arial, sans-serif",
-    fontSize: 16,
-    resize: "vertical",
-  },
-  saveButton: {
-    width: "100%",
-    padding: 15,
-    color: "#ffffff",
-    background: "#087c42",
-    border: "3px solid #111111",
-    borderRadius: 13,
-    fontSize: 18,
-    fontWeight: 900,
-    cursor: "pointer",
-  },
-  message: {
-    margin: "16px 0 0",
-    padding: 12,
-    color: "#172a67",
-    background: "#e6edff",
-    borderRadius: 10,
-    textAlign: "center",
-    fontWeight: 900,
-  },
-  empty: {
-    padding: 30,
-    background: "#ffffff",
-    border: "3px dashed #777777",
-    borderRadius: 16,
-    textAlign: "center",
-  },
-  emptyIcon: {
-    fontSize: 55,
-  },
-  recordGrid: {
-    display: "grid",
-    gap: 18,
-  },
-  recordCard: {
-    padding: 20,
-    background: "#ffffff",
-    border: "3px solid #111111",
-    borderRadius: 16,
-    boxShadow: "0 8px 20px rgba(0,0,0,.15)",
-  },
-  workBadge: {
-    display: "inline-block",
-    padding: "5px 10px",
-    color: "#ffffff",
-    background: "#6731ad",
-    borderRadius: 999,
-    fontSize: 13,
-    fontWeight: 900,
-  },
-  recordTitle: {
-    margin: "13px 0 5px",
-    fontSize: 27,
-  },
-  recordCreator: {
-    margin: "0 0 12px",
-    color: "#173e9a",
-    fontSize: 18,
-    fontWeight: 900,
-  },
-  recordDetail: {
-    margin: "6px 0",
-    fontWeight: 700,
-  },
-  fingerprintBox: {
-    marginTop: 16,
-    padding: 12,
-    background: "#eef2f7",
-    border: "2px solid #657080",
-    borderRadius: 10,
-  },
-  fingerprint: {
-    display: "block",
-    marginTop: 7,
-    overflowWrap: "anywhere",
-    color: "#173e9a",
-    fontSize: 12,
-  },
-  buttonRow: {
-    display: "flex",
-    gap: 10,
-    flexWrap: "wrap",
-    marginTop: 16,
-  },
-  downloadButton: {
-    flex: 1,
-    minWidth: 180,
-    padding: 12,
-    color: "#ffffff",
-    background: "#173e9a",
-    border: "3px solid #111111",
-    borderRadius: 11,
-    fontWeight: 900,
-    cursor: "pointer",
-  },
-  deleteButton: {
-    padding: "12px 18px",
-    color: "#ffffff",
-    background: "#b51f2e",
-    border: "3px solid #111111",
-    borderRadius: 11,
-    fontWeight: 900,
-    cursor: "pointer",
-  },
-  footer: {
-    marginTop: 30,
-    textAlign: "center",
-    fontWeight: 800,
-  },
-}; 
+} 
