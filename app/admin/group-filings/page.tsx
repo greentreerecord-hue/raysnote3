@@ -235,7 +235,7 @@ export default function GroupFilingsAdminPage() {
   return (
     <main className="page">
       <div className="container">
-        <Link className="backButton" href="/admin/dashboard">
+        <Link className="backButton" href="/">
           ← Admin Dashboard
         </Link>
 
@@ -676,3 +676,4 @@ export default function GroupFilingsAdminPage() {
     </main>
   );
 } 
+
