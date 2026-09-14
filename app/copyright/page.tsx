@@ -514,7 +514,59 @@ https://www.copyright.gov/registration/
           Start Assisted Copyright Application
         </Link>
       </section>
-     
+ <section
+        style={{
+          maxWidth: "1050px",
+          margin: "0 auto 24px",
+          padding: "28px",
+          color: "#111111",
+          textAlign: "center",
+          background: "#eafaf1",
+          border: "3px solid #20b86a",
+          borderRadius: "22px",
+        }}
+      >
+        <p
+          style={{
+            color: "#08783f",
+            fontWeight: 900,
+            letterSpacing: "2px",
+          }}
+        >
+          FULL-SERVICE FILING
+        </p>
+
+        <h2>
+          Register Up to 10 Unpublished Songs — $159
+        </h2>
+
+        <p>
+          Includes a $74 Ray&apos;sNotes service fee and the
+          $85 U.S. Copyright Office group filing fee.
+        </p>
+
+        <p>
+          Ray&apos;sNotes reviews eligibility, prepares the
+          application, and manually submits eligible filings.
+          Registration is not guaranteed. No legal advice.
+        </p>
+
+        <Link
+          href="/copyright/group-filing"
+          style={{
+            display: "inline-block",
+            padding: "16px 22px",
+            color: "#ffffff",
+            fontWeight: 900,
+            textDecoration: "none",
+            background: "#087fdd",
+            borderRadius: "12px",
+          }}
+        >
+          Start Full-Service Group Filing — $159
+        </Link>
+      </section> 
+    
 <section className="records">
         <h2>My Saved Creation Records</h2>
 
