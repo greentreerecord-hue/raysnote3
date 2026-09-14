@@ -513,7 +513,7 @@ https://www.copyright.gov/registration/
         >
           Start Assisted Copyright Application
         </Link>
-      </section> 
+      </section>
      
 <section className="records">
         <h2>My Saved Creation Records</h2>
@@ -828,3 +828,4 @@ https://www.copyright.gov/registration/
     </main>
   );
 } 
+
