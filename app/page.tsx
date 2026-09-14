@@ -277,7 +277,7 @@ export default function HomePage() {
             </a>
 
             <a
-              href="/admin/login"
+              href="/admin/group-filings"
               style={styles.adminButton}
             >
               🔐 Admin Dashboard
