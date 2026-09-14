@@ -19,22 +19,19 @@ const videos: VideoItem[] = [
   {
     id: 1,
     title: "It's Cool",
-    description:
-      "Featured music video on Ray'sNotes.",
+    description: "Featured music video on Ray'sNotes.",
     src: "/videos/its%20cool.mp4",
   },
   {
     id: 2,
     title: "Video 2",
-    description:
-      "Watch Video 2 on Ray'sNotes.",
+    description: "Watch Video 2 on Ray'sNotes.",
     src: "/videos/video2.mp4",
   },
   {
     id: 3,
     title: "Video 3",
-    description:
-      "Watch Video 3 on Ray'sNotes.",
+    description: "Watch Video 3 on Ray'sNotes.",
     src: "/videos/video3.mp4",
   },
 ];
@@ -67,22 +64,16 @@ export default function HomePage() {
 
   useEffect(() => {
     try {
-      const savedViews = localStorage.getItem(
-        "raysnotes-views"
-      );
-
-      const savedLikes = localStorage.getItem(
-        "raysnotes-likes"
-      );
-
+      const savedViews =
+        localStorage.getItem("raysnotes-views");
+      const savedLikes =
+        localStorage.getItem("raysnotes-likes");
       const savedLikedVideos = localStorage.getItem(
         "raysnotes-liked-videos"
       );
-
       const savedSubscribed = localStorage.getItem(
         "raysnotes-subscribed"
       );
-
       const savedSubscriberCount = localStorage.getItem(
         "raysnotes-subscriber-count"
       );
@@ -211,7 +202,6 @@ export default function HomePage() {
       await navigator.clipboard.writeText(
         getVideoUrl(videoId)
       );
-
       showMessage("Video link copied.");
     } catch {
       showMessage("Unable to copy the link.");
@@ -286,6 +276,13 @@ export default function HomePage() {
               © Copyright Center
             </a>
 
+            <a
+              href="/admin/login"
+              style={styles.adminButton}
+            >
+              🔐 Admin Dashboard
+            </a>
+
             <button
               type="button"
               onClick={handleSubscribe}
@@ -349,11 +346,7 @@ export default function HomePage() {
               onPlay={() => handleVideoPlay(video.id)}
               style={styles.video}
             >
-              <source
-                src={video.src}
-                type="video/mp4"
-              />
-
+              <source src={video.src} type="video/mp4" />
               Your browser does not support this video.
             </video>
 
@@ -381,10 +374,9 @@ export default function HomePage() {
                 onClick={() => handleLike(video.id)}
                 style={{
                   ...styles.likeButton,
-                  backgroundColor:
-                    likedVideos[video.id]
-                      ? "#ff3b30"
-                      : "#333333",
+                  backgroundColor: likedVideos[video.id]
+                    ? "#ff3b30"
+                    : "#333333",
                 }}
               >
                 {likedVideos[video.id]
@@ -455,10 +447,10 @@ export default function HomePage() {
         </h2>
 
         <p style={styles.copyrightText}>
-          Create a private record and digital
-          fingerprint for your original music, writing,
-          artwork, photography, video, software, or
-          other creative work.
+          Create a private record and digital fingerprint
+          for your original music, writing, artwork,
+          photography, video, software, or other creative
+          work.
         </p>
 
         <a
@@ -541,6 +533,17 @@ const styles: Record<string, React.CSSProperties> = {
     padding: "11px 16px",
     backgroundColor: "#35dc7b",
     color: "#111111",
+    border: "3px solid #ffffff",
+    borderRadius: 9,
+    textDecoration: "none",
+    fontSize: 16,
+    fontWeight: 900,
+  },
+  adminButton: {
+    display: "inline-block",
+    padding: "11px 16px",
+    backgroundColor: "#087fdd",
+    color: "#ffffff",
     border: "3px solid #ffffff",
     borderRadius: 9,
     textDecoration: "none",
