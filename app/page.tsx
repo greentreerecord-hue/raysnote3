@@ -304,7 +304,18 @@ export default function HomePage() {
               style={styles.paymentButton}
             >
               Paid Subscription
-            </a>
+            </a><a
+  href="https://raysstream.com"
+  target="_blank"
+  rel="noopener noreferrer"
+  style={{
+    ...styles.paymentButton,
+    background: "#2563eb",
+    color: "white",
+  }}
+>
+  ▶ Ray&apos;sStream
+</a> 
           </nav>
         </div>
       </header>
