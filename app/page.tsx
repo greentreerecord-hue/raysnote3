@@ -339,7 +339,20 @@ export default function HomePage() {
           style={styles.largeCopyrightButton}
         >
           © Open Copyright Center
-        </a>
+        </a><a
+  href="/filing-center"
+  style={{
+    ...styles.largeCopyrightButton,
+    display: "inline-block",
+    background: "#2563eb",
+    color: "#ffffff",
+    marginTop: "16px",
+    marginLeft: "12px",
+  }}
+>
+  📂 Open Filing Center
+</a> 
+
       </section>
 
       <section style={styles.videoGrid}>
