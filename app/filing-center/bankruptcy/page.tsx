@@ -85,12 +85,48 @@ export default function HawaiiBankruptcyPage() {
         </nav>
 
         <header>
-          <h1>Hawaii Bankruptcy Preparation Package</h1>
-          <p>
-            Organize your information for review with an attorney
-            or alongside official court instructions.
-          </p>
-        </header>
+  <h1>Hawaii Bankruptcy Preparation Organizer</h1>
+  <p>
+    Organize your household, income, expenses, property, and debt
+    information in one place.
+  </p>
+</header>
+
+<section
+  className="screen-only"
+  style={{
+    marginTop: "24px",
+    padding: "24px",
+    border: "1px solid #555",
+    borderRadius: "16px",
+    background: "#171717",
+    color: "#ffffff",
+  }}
+>
+  <h2>What the Organizer Includes</h2>
+  <ul>
+    <li>A questionnaire for organizing your information</li>
+    <li>A checklist of records to gather</li>
+    <li>A printable summary of your answers</li>
+    <li>Links to official Hawaii bankruptcy court resources</li>
+  </ul>
+  <p>
+    This organizer does not prepare official court forms, submit a
+    bankruptcy case, or include legal advice or attorney representation.
+    Official bankruptcy forms are available free from the U.S. Courts.
+  </p>
+  <p>
+    Answers are kept only while this page remains open. Print or save
+    your summary as a PDF before refreshing or closing the page.
+  </p>
+
+  <h2>Lawyer Assistance — Coming Soon</h2>
+  <p>
+    Lawyer assistance is not currently available through Ray&apos;sNotes.
+    Pricing and service details will be announced when available.
+  </p>
+</section> 
+
 
         <section className="notice">
           <h2>Preparation summary only</h2>
