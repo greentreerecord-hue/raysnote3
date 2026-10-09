@@ -1,6 +1,8 @@
 "use client";
 
-import { useState, type CSSProperties } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
+
+const PAYMENT_API = "/api/bankruptcy-organizer-payment";
 
 const fields = [
   { name: "name", label: "Full legal name", rows: 1 },
@@ -14,7 +16,7 @@ const fields = [
   {
     name: "income",
     label: "Income",
-    hint: "List income sources, amounts, and how often you receive them.",
+    hint: "List income sources, amounts, and payment frequency.",
     rows: 5,
   },
   {
@@ -41,11 +43,7 @@ const fields = [
     hint: "Record information you want to discuss with an attorney.",
     rows: 5,
   },
-  {
-    name: "questions",
-    label: "Questions for an attorney",
-    rows: 4,
-  },
+  { name: "questions", label: "Questions for an attorney", rows: 4 },
 ];
 
 const checklist = [
@@ -74,80 +72,171 @@ const buttonStyle: CSSProperties = {
 export default function HawaiiBankruptcyPage() {
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [checked, setChecked] = useState<Record<string, boolean>>({});
+  const [sessionId, setSessionId] = useState("");
+  const [paid, setPaid] = useState(false);
+  const [verifying, setVerifying] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get("session_id");
+
+    if (!id) {
+      setVerifying(false);
+      if (params.get("cancelled")) {
+        setMessage("Checkout was cancelled. You can try again below.");
+      }
+      return;
+    }
+
+    let active = true;
+    setSessionId(id);
+
+    async function verify() {
+      try {
+        const response = await fetch(
+          `${PAYMENT_API}?session_id=${encodeURIComponent(id!)}`,
+          { cache: "no-store" }
+        );
+        const data = await response.json();
+
+        if (!response.ok || data.paid !== true) {
+          throw new Error(data.error || "Payment could not be verified.");
+        }
+
+        if (active) {
+          setPaid(true);
+          setMessage("Payment verified. Your organizer is unlocked.");
+        }
+      } catch (error) {
+        if (active) {
+          setMessage(
+            error instanceof Error
+              ? error.message
+              : "Payment verification failed."
+          );
+        }
+      } finally {
+        if (active) setVerifying(false);
+      }
+    }
+
+    void verify();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  async function startCheckout() {
+    setBusy(true);
+    setMessage("");
+
+    try {
+      const response = await fetch(PAYMENT_API, { method: "POST" });
+      const data = await response.json();
+
+      if (!response.ok || typeof data.url !== "string") {
+        throw new Error(data.error || "Unable to open checkout.");
+      }
+
+      window.location.assign(data.url);
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : "Checkout failed."
+      );
+      setBusy(false);
+    }
+  }
+
+  async function downloadPdf() {
+    setBusy(true);
+    setMessage("");
+
+    try {
+      const response = await fetch("/api/bankruptcy-organizer-pdf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId, answers, checked }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || "The PDF could not be created.");
+      }
+
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = "raysnotes-hawaii-bankruptcy-organizer.pdf";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
+      setMessage("Your PDF download is ready. Keep your copy secure.");
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : "Download failed."
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
-    <main className="bankruptcy-page">
-      <div className="page-content">
-        <nav className="screen-only">
-          <a href="/filing-center" style={buttonStyle}>
-            ← Back to Filing Center
-          </a>
-        </nav>
+    <main>
+      <div className="content">
+        <a href="/filing-center" style={buttonStyle}>
+          ← Back to Filing Center
+        </a>
 
         <header>
-  <h1>Hawaii Bankruptcy Preparation Organizer</h1>
-  <p>
-    Organize your household, income, expenses, property, and debt
-    information in one place.
-  </p>
-</header>
-
-<section
-  className="screen-only"
-  style={{
-    marginTop: "24px",
-    padding: "24px",
-    border: "1px solid #555",
-    borderRadius: "16px",
-    background: "#171717",
-    color: "#ffffff",
-  }}
->
-  <h2>What the Organizer Includes</h2>
-  <ul>
-    <li>A questionnaire for organizing your information</li>
-    <li>A checklist of records to gather</li>
-    <li>A printable summary of your answers</li>
-    <li>Links to official Hawaii bankruptcy court resources</li>
-  </ul>
-  <p>
-    This organizer does not prepare official court forms, submit a
-    bankruptcy case, or include legal advice or attorney representation.
-    Official bankruptcy forms are available free from the U.S. Courts.
-  </p>
-  <p>
-    Answers are kept only while this page remains open. Print or save
-    your summary as a PDF before refreshing or closing the page.
-  </p>
-
-  <h2>Lawyer Assistance — Coming Soon</h2>
-  <p>
-    Lawyer assistance is not currently available through Ray&apos;sNotes.
-    Pricing and service details will be announced when available.
-  </p>
-</section> 
-
-
-        <section className="notice">
-          <h2>Preparation summary only</h2>
+          <h1>Hawaii Bankruptcy Preparation Organizer</h1>
           <p>
-            This questionnaire is not a bankruptcy petition, a complete
-            list of required disclosures, or legal advice. It does not
-            determine eligibility, select a bankruptcy chapter, or file
-            anything with the court.
+            Organize your household, income, expenses, property,
+            and debt information.
+          </p>
+        </header>
+
+        <section>
+          <h2>What You Receive — $9.99</h2>
+          <ul>
+            <li>A questionnaire for organizing your information</li>
+            <li>A checklist of records to gather</li>
+            <li>A downloadable PDF containing your answers</li>
+            <li>Links to official Hawaii bankruptcy court resources</li>
+          </ul>
+          <p>
+            One-time payment. This organizer does not prepare official
+            court forms, submit a bankruptcy case, or include legal
+            advice or attorney representation. Official bankruptcy forms
+            are available free from the U.S. Courts.
           </p>
           <p>
-            Your answers are held only while this page remains open.
-            They are not saved by this form or sent to Ray&apos;sNotes.
-            Refreshing or closing the page clears them.
+            Pay first, then enter your answers. Use the same browser
+            to return from checkout.
           </p>
-          <p>
-            Do not enter Social Security numbers, account numbers,
-            passwords, or upload financial documents here.
-          </p>
+
+          {verifying ? (
+            <p role="status">Checking payment…</p>
+          ) : !paid ? (
+            <button
+              type="button"
+              style={buttonStyle}
+              disabled={busy}
+              onClick={startCheckout}
+            >
+              {busy ? "Opening checkout…" : "Buy Organizer — $9.99"}
+            </button>
+          ) : (
+            <p>✓ Payment verified</p>
+          )}
+
+          {message && <p role="status">{message}</p>}
         </section>
 
-        <section className="screen-only resource-links">
+        <section>
           <h2>Official Hawaii Court Resources</h2>
           <div className="actions">
             <a
@@ -175,96 +264,103 @@ export default function HawaiiBankruptcyPage() {
               Chapter 13 Requirements ↗
             </a>
           </div>
-          <p>
-            These links provide information. Choosing a link does
-            not select a chapter or submit a case.
-          </p>
         </section>
 
-        <section>
-          <h2>Your Preparation Notes</h2>
-          {fields.map((field) => (
-            <div className="field" key={field.name}>
-              <label htmlFor={field.name}>{field.label}</label>
-              {"hint" in field && (
-                <p id={`${field.name}-hint`}>{field.hint}</p>
-              )}
+        {paid && (
+          <>
+            <section className="notice">
+              <h2>Your Information</h2>
+              <p>
+                Answers stay in this page until you request your PDF.
+                Creating the PDF sends your answers to our server for
+                processing. This feature does not save your answers
+                to a database.
+              </p>
+              <p>
+                Refreshing or closing this page clears your answers.
+                Download your PDF before leaving.
+              </p>
+              <p>
+                Do not enter Social Security numbers, account numbers,
+                passwords, or financial documents.
+              </p>
+            </section>
 
-              <textarea
-                className="screen-only"
-                id={field.name}
-                rows={field.rows}
-                value={answers[field.name] || ""}
-                aria-describedby={
-                  "hint" in field ? `${field.name}-hint` : undefined
-                }
-                onChange={(event) =>
-                  setAnswers((previous) => ({
-                    ...previous,
-                    [field.name]: event.target.value,
-                  }))
-                }
-              />
+            <section>
+              <h2>Your Preparation Notes</h2>
+              {fields.map((field) => (
+                <div className="field" key={field.name}>
+                  <label htmlFor={field.name}>{field.label}</label>
+                  {"hint" in field && (
+                    <p id={`${field.name}-hint`}>{field.hint}</p>
+                  )}
+                  <textarea
+                    id={field.name}
+                    rows={field.rows}
+                    maxLength={10000}
+                    value={answers[field.name] || ""}
+                    aria-describedby={
+                      "hint" in field ? `${field.name}-hint` : undefined
+                    }
+                    onChange={(event) =>
+                      setAnswers((previous) => ({
+                        ...previous,
+                        [field.name]: event.target.value,
+                      }))
+                    }
+                  />
+                </div>
+              ))}
+            </section>
 
-              <div className="print-answer">
-                {answers[field.name] || "Not entered"}
-              </div>
-            </div>
-          ))}
-        </section>
+            <section>
+              <h2>Documents to Gather for Review</h2>
+              <p>
+                Keep your records in your own secure storage.
+                This checklist does not replace court requirements.
+              </p>
+              {checklist.map((item) => (
+                <label className="checklist-item" key={item}>
+                  <input
+                    type="checkbox"
+                    checked={!!checked[item]}
+                    onChange={(event) =>
+                      setChecked((previous) => ({
+                        ...previous,
+                        [item]: event.target.checked,
+                      }))
+                    }
+                  />
+                  {item}
+                </label>
+              ))}
+            </section>
 
-        <section>
-          <h2>Documents to Gather for Review</h2>
-          <p>
-            Keep these documents in your own secure storage.
-            This checklist does not replace the court&apos;s requirements.
-          </p>
-
-          {checklist.map((item) => (
-            <label className="checklist-item" key={item}>
-              <input
-                className="screen-only"
-                type="checkbox"
-                checked={!!checked[item]}
-                onChange={(event) =>
-                  setChecked((previous) => ({
-                    ...previous,
-                    [item]: event.target.checked,
-                  }))
-                }
-              />
-              <span className="print-only">
-                {checked[item] ? "Gathered: " : "Still to gather: "}
-              </span>
-              {item}
-            </label>
-          ))}
-        </section>
-
-        <section className="screen-only">
-          <h2>Save Your Summary</h2>
-          <p>
-            Click below, then choose your printer or “Save as PDF”
-            in the print window. The summary may contain private
-            financial information; keep your copy secure.
-          </p>
-
-          <button
-            type="button"
-            style={buttonStyle}
-            onClick={() => window.print()}
-          >
-            Print / Save Summary as PDF
-          </button>
-        </section>
+            <section>
+              <h2>Download Your Organizer</h2>
+              <p>
+                Your PDF includes your answers and checklist.
+                Keep it secure because it may contain private information.
+              </p>
+              <button
+                type="button"
+                style={buttonStyle}
+                disabled={busy}
+                onClick={downloadPdf}
+              >
+                {busy ? "Creating PDF…" : "Download My PDF"}
+              </button>
+            </section>
+          </>
+        )}
 
         <footer>
-          Ray&apos;sNotes preparation summary — not filed with any court.
+          Ray&apos;sNotes preparation organizer — not filed with any court.
         </footer>
       </div>
 
       <style jsx>{`
-        .bankruptcy-page {
+        main {
           min-height: 100vh;
           padding: 32px 20px;
           background: #080808;
@@ -272,7 +368,7 @@ export default function HawaiiBankruptcyPage() {
           font-family: Arial, sans-serif;
           line-height: 1.7;
         }
-        .page-content {
+        .content {
           max-width: 900px;
           margin: 0 auto;
         }
@@ -309,11 +405,7 @@ export default function HawaiiBankruptcyPage() {
           font-size: 18px;
           font-weight: bold;
         }
-        .field p {
-          margin: 6px 0 10px;
-        }
         textarea {
-          display: block;
           box-sizing: border-box;
           width: 100%;
           padding: 12px;
@@ -326,7 +418,6 @@ export default function HawaiiBankruptcyPage() {
         }
         textarea:focus-visible {
           outline: 3px solid #60a5fa;
-          outline-offset: 2px;
         }
         .checklist-item {
           display: flex;
@@ -334,48 +425,13 @@ export default function HawaiiBankruptcyPage() {
           gap: 12px;
           margin: 12px 0;
         }
-        .print-answer,
-        .print-only {
-          display: none;
+        button:disabled {
+          opacity: 0.65;
+          cursor: wait;
         }
         footer {
           margin: 32px 0;
           color: #ccc;
-        }
-        @media print {
-          .screen-only {
-            display: none !important;
-          }
-          .print-answer,
-          .print-only {
-            display: block;
-          }
-          .print-answer {
-            white-space: pre-wrap;
-            overflow-wrap: anywhere;
-            margin-top: 8px;
-          }
-          .bankruptcy-page {
-            background: white;
-            color: black;
-            padding: 0;
-          }
-          section {
-            background: white;
-            border-color: #aaa;
-            padding: 14px;
-          }
-          p,
-          footer {
-            color: black;
-          }
-          h2,
-          .field label {
-            break-after: avoid;
-          }
-          .checklist-item {
-            break-inside: avoid;
-          }
         }
       `}</style>
     </main>
