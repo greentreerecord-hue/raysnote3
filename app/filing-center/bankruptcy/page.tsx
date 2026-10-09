@@ -3,6 +3,7 @@
 import { useEffect, useState, type CSSProperties } from "react";
 
 const PAYMENT_API = "/api/bankruptcy-organizer-payment";
+const STORAGE_KEY = "raysnotes-bankruptcy-payment-session";
 
 const fields = [
   { name: "name", label: "Full legal name", rows: 1 },
@@ -69,6 +70,14 @@ const buttonStyle: CSSProperties = {
   cursor: "pointer",
 };
 
+function rememberPayment(id: string) {
+  try {
+    localStorage.setItem(STORAGE_KEY, id);
+  } catch {
+    // Access still works for this visit.
+  }
+}
+
 export default function HawaiiBankruptcyPage() {
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [checked, setChecked] = useState<Record<string, boolean>>({});
@@ -77,18 +86,21 @@ export default function HawaiiBankruptcyPage() {
   const [verifying, setVerifying] = useState(true);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [showRecovery, setShowRecovery] = useState(false);
+  const [recoveryInput, setRecoveryInput] = useState("");
+  const [recoveryCode, setRecoveryCode] = useState("");
+  const [codeMessage, setCodeMessage] = useState("");
 
   useEffect(() => {
-    const storageKey = "raysnotes-bankruptcy-payment-session";
     const params = new URLSearchParams(window.location.search);
     const returnedId = params.get("session_id");
 
     let savedId = "";
 
     try {
-      savedId = localStorage.getItem(storageKey) || "";
+      savedId = localStorage.getItem(STORAGE_KEY) || "";
     } catch {
-      // Payment verification still works if storage is unavailable.
+      // Verification still works if storage is unavailable.
     }
 
     const id = returnedId || savedId;
@@ -126,16 +138,17 @@ export default function HawaiiBankruptcyPage() {
 
         if (!active) return;
 
-        try {
-          localStorage.setItem(storageKey, id);
-        } catch {
-          // The organizer can still unlock for this visit.
+        rememberPayment(id);
+        setPaid(true);
+
+        if (typeof data.recoveryCode === "string") {
+          setRecoveryCode(data.recoveryCode);
         }
 
-        setPaid(true);
         setMessage("Payment verified. Your organizer is unlocked.");
       } catch (error) {
         if (active) {
+          setShowRecovery(true);
           setMessage(
             error instanceof Error
               ? error.message
@@ -152,15 +165,18 @@ export default function HawaiiBankruptcyPage() {
     return () => {
       active = false;
     };
-  }, []); 
-
+  }, []);
 
   async function startCheckout() {
     setBusy(true);
     setMessage("");
 
     try {
-      const response = await fetch(PAYMENT_API, { method: "POST" });
+      const response = await fetch(PAYMENT_API, {
+        method: "POST",
+        credentials: "same-origin",
+      });
+
       const data = await response.json();
 
       if (!response.ok || typeof data.url !== "string") {
@@ -176,6 +192,114 @@ export default function HawaiiBankruptcyPage() {
     }
   }
 
+  async function recoverPurchase() {
+    const code = recoveryInput.trim();
+
+    if (!code) {
+      setMessage("Paste your private recovery code first.");
+      return;
+    }
+
+    setBusy(true);
+    setMessage("");
+
+    try {
+      const response = await fetch(PAYMENT_API, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "recover",
+          recoveryCode: code,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (
+        !response.ok ||
+        data.paid !== true ||
+        typeof data.sessionId !== "string" ||
+        typeof data.recoveryCode !== "string"
+      ) {
+        throw new Error(
+          data.error || "Your purchase could not be recovered."
+        );
+      }
+
+      setSessionId(data.sessionId);
+      rememberPayment(data.sessionId);
+      setRecoveryCode(data.recoveryCode);
+      setPaid(true);
+      setRecoveryInput("");
+      setShowRecovery(false);
+      setMessage(
+        "Purchase recovered. You can create and download your organizer again."
+      );
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Recovery failed. Please try again."
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function copyRecoveryCode() {
+    setCodeMessage("");
+
+    try {
+      await navigator.clipboard.writeText(recoveryCode);
+      setCodeMessage(
+        "Recovery code copied. Save it somewhere private."
+      );
+    } catch {
+      setCodeMessage(
+        "Select the code below and copy it manually."
+      );
+    }
+  }
+
+  function saveRecoveryCode() {
+    const text = [
+      "Ray'sNotes Hawaii Bankruptcy Organizer",
+      "",
+      "PRIVATE RECOVERY CODE",
+      recoveryCode,
+      "",
+      "Keep this code private. Anyone with it can unlock the organizer.",
+      "",
+      "Return to:",
+      "https://www.raysnotes.com/filing-center/bankruptcy",
+      "",
+      "Choose Recover My Download and paste the complete code.",
+      "Recovery restores paid access, not previously entered answers.",
+    ].join("\n");
+
+    const blob = new Blob([text], {
+      type: "text/plain;charset=utf-8",
+    });
+
+    const objectUrl = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = "raysnotes-private-recovery-code.txt";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+
+    window.setTimeout(
+      () => URL.revokeObjectURL(objectUrl),
+      60000
+    );
+
+    setCodeMessage(
+      "Recovery code file download started. Keep the file private."
+    );
+  }
+
   async function downloadPdf() {
     setBusy(true);
     setMessage("");
@@ -183,13 +307,16 @@ export default function HawaiiBankruptcyPage() {
     try {
       const response = await fetch("/api/bankruptcy-organizer-pdf", {
         method: "POST",
+        credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sessionId, answers, checked }),
       });
 
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
-        throw new Error(data.error || "The PDF could not be created.");
+        throw new Error(
+          data.error || "The PDF could not be created."
+        );
       }
 
       const blob = await response.blob();
@@ -200,8 +327,15 @@ export default function HawaiiBankruptcyPage() {
       document.body.appendChild(link);
       link.click();
       link.remove();
-      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
-      setMessage("Your PDF download is ready. Keep your copy secure.");
+
+      window.setTimeout(
+        () => URL.revokeObjectURL(objectUrl),
+        60000
+      );
+
+      setMessage(
+        "Your PDF download is ready. Keep your copy secure."
+      );
     } catch (error) {
       setMessage(
         error instanceof Error ? error.message : "Download failed."
@@ -242,26 +376,141 @@ export default function HawaiiBankruptcyPage() {
           </p>
           <p>
             Pay first, then enter your answers. Use the same browser
-            to return from checkout.
+            to return from checkout. After payment, save your private
+            recovery code for future access.
           </p>
 
           {verifying ? (
             <p role="status">Checking payment…</p>
           ) : !paid ? (
-            <button
-              type="button"
-              style={buttonStyle}
-              disabled={busy}
-              onClick={startCheckout}
-            >
-              {busy ? "Opening checkout…" : "Buy Organizer — $9.99"}
-            </button>
+            <>
+              <div className="actions">
+                <button
+                  type="button"
+                  style={buttonStyle}
+                  disabled={busy}
+                  onClick={startCheckout}
+                >
+                  {busy ? "Please wait…" : "Buy Organizer — $9.99"}
+                </button>
+
+                <button
+                  type="button"
+                  style={{
+                    ...buttonStyle,
+                    background: "#374151",
+                  }}
+                  disabled={busy}
+                  aria-expanded={showRecovery}
+                  aria-controls="purchase-recovery"
+                  onClick={() =>
+                    setShowRecovery((previous) => !previous)
+                  }
+                >
+                  Recover My Download
+                </button>
+              </div>
+
+              {showRecovery && (
+                <div id="purchase-recovery" className="recovery">
+                  <h3>Already Purchased?</h3>
+                  <p>
+                    Paste the private recovery code you saved after
+                    paying. You do not need to pay again.
+                  </p>
+                  <p>
+                    This restores access to create a new PDF.
+                    Previously entered answers are not stored.
+                  </p>
+
+                  <form
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      void recoverPurchase();
+                    }}
+                  >
+                    <label htmlFor="recovery-input">
+                      Private recovery code
+                    </label>
+                    <textarea
+                      id="recovery-input"
+                      rows={4}
+                      maxLength={400}
+                      value={recoveryInput}
+                      disabled={busy}
+                      spellCheck={false}
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      autoComplete="off"
+                      onChange={(event) =>
+                        setRecoveryInput(event.target.value)
+                      }
+                    />
+
+                    <button
+                      type="submit"
+                      style={buttonStyle}
+                      disabled={busy || !recoveryInput.trim()}
+                    >
+                      {busy
+                        ? "Please wait…"
+                        : "Restore My Purchase"}
+                    </button>
+                  </form>
+                </div>
+              )}
+            </>
           ) : (
             <p>✓ Payment verified</p>
           )}
 
           {message && <p role="status">{message}</p>}
         </section>
+
+        {paid && recoveryCode && (
+          <section className="notice">
+            <h2>Save Your Private Recovery Code</h2>
+            <p>
+              Use this code to unlock your purchased organizer if
+              you change browsers or devices, or clear browser data.
+            </p>
+            <p>
+              Keep it private. Anyone with this code can access the
+              organizer. It does not restore your previous answers.
+            </p>
+
+            <label htmlFor="saved-recovery-code">
+              Your recovery code
+            </label>
+            <textarea
+              id="saved-recovery-code"
+              rows={4}
+              value={recoveryCode}
+              readOnly
+              spellCheck={false}
+              onFocus={(event) => event.currentTarget.select()}
+            />
+
+            <div className="actions">
+              <button
+                type="button"
+                style={buttonStyle}
+                onClick={copyRecoveryCode}
+              >
+                Copy Recovery Code
+              </button>
+              <button
+                type="button"
+                style={buttonStyle}
+                onClick={saveRecoveryCode}
+              >
+                Save Recovery Code File
+              </button>
+            </div>
+
+            {codeMessage && <p role="status">{codeMessage}</p>}
+          </section>
+        )}
 
         <section>
           <h2>Official Hawaii Court Resources</h2>
@@ -327,7 +576,9 @@ export default function HawaiiBankruptcyPage() {
                     maxLength={10000}
                     value={answers[field.name] || ""}
                     aria-describedby={
-                      "hint" in field ? `${field.name}-hint` : undefined
+                      "hint" in field
+                        ? `${field.name}-hint`
+                        : undefined
                     }
                     onChange={(event) =>
                       setAnswers((previous) => ({
@@ -424,37 +675,50 @@ export default function HawaiiBankruptcyPage() {
           flex-wrap: wrap;
           gap: 14px;
         }
+        .recovery {
+          margin-top: 24px;
+          padding-top: 16px;
+          border-top: 1px solid #555;
+        }
         .field {
           margin: 24px 0;
         }
-        .field label {
+        label {
           display: block;
-          font-size: 18px;
           font-weight: bold;
+        }
+        .field label {
+          font-size: 18px;
         }
         textarea {
           box-sizing: border-box;
           width: 100%;
           padding: 12px;
+          margin: 8px 0 16px;
           border: 1px solid #777;
           border-radius: 8px;
           background: #080808;
           color: white;
           font: inherit;
           resize: vertical;
+          overflow-wrap: anywhere;
         }
-        textarea:focus-visible {
+        textarea:focus-visible,
+        button:focus-visible,
+        a:focus-visible {
           outline: 3px solid #60a5fa;
+          outline-offset: 3px;
         }
         .checklist-item {
           display: flex;
           align-items: baseline;
           gap: 12px;
           margin: 12px 0;
+          font-weight: normal;
         }
         button:disabled {
           opacity: 0.65;
-          cursor: wait;
+          cursor: not-allowed;
         }
         footer {
           margin: 32px 0;
