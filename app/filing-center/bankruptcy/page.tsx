@@ -79,14 +79,27 @@ export default function HawaiiBankruptcyPage() {
   const [message, setMessage] = useState("");
 
   useEffect(() => {
+    const storageKey = "raysnotes-bankruptcy-payment-session";
     const params = new URLSearchParams(window.location.search);
-    const id = params.get("session_id");
+    const returnedId = params.get("session_id");
+
+    let savedId = "";
+
+    try {
+      savedId = localStorage.getItem(storageKey) || "";
+    } catch {
+      // Payment verification still works if storage is unavailable.
+    }
+
+    const id = returnedId || savedId;
 
     if (!id) {
       setVerifying(false);
+
       if (params.get("cancelled")) {
         setMessage("Checkout was cancelled. You can try again below.");
       }
+
       return;
     }
 
@@ -96,19 +109,31 @@ export default function HawaiiBankruptcyPage() {
     async function verify() {
       try {
         const response = await fetch(
-          `${PAYMENT_API}?session_id=${encodeURIComponent(id!)}`,
-          { cache: "no-store" }
+          `${PAYMENT_API}?session_id=${encodeURIComponent(id)}`,
+          {
+            cache: "no-store",
+            credentials: "same-origin",
+          }
         );
+
         const data = await response.json();
 
         if (!response.ok || data.paid !== true) {
-          throw new Error(data.error || "Payment could not be verified.");
+          throw new Error(
+            data.error || "Payment could not be verified."
+          );
         }
 
-        if (active) {
-          setPaid(true);
-          setMessage("Payment verified. Your organizer is unlocked.");
+        if (!active) return;
+
+        try {
+          localStorage.setItem(storageKey, id);
+        } catch {
+          // The organizer can still unlock for this visit.
         }
+
+        setPaid(true);
+        setMessage("Payment verified. Your organizer is unlocked.");
       } catch (error) {
         if (active) {
           setMessage(
@@ -123,10 +148,12 @@ export default function HawaiiBankruptcyPage() {
     }
 
     void verify();
+
     return () => {
       active = false;
     };
-  }, []);
+  }, []); 
+
 
   async function startCheckout() {
     setBusy(true);
