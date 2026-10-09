@@ -97,12 +97,26 @@ export async function POST(request: NextRequest) {
     });
 
     return response;
-  } catch {
+  } catch (error) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Unknown checkout error";
+
+    console.error(
+      "Organizer checkout failed:",
+      message.replace(
+        /\b(?:sk|rk)_(?:live|test)_[A-Za-z0-9_]+/g,
+        "[REDACTED]"
+      )
+    );
+
     return json(
       { error: "Unable to start checkout. Please try again." },
       500
     );
-  }
+  } 
+
 }
 
 export async function GET(request: NextRequest) {
