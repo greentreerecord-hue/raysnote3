@@ -145,7 +145,7 @@ export default function AssistedCopyrightApplicationPage() {
     );
   }
 
-  function submit(
+  async function submit( 
     event: FormEvent<HTMLFormElement>
   ) {
     event.preventDefault();
@@ -222,24 +222,65 @@ Official portal: https://www.copyright.gov/registration/
 Ray'sNotes does not guarantee registration and does not provide legal advice.
 `;
 
-    const blob = new Blob([summary], {
-      type: "text/plain;charset=utf-8",
-    });
+    try {
+      const sessionId = localStorage.getItem(CREDIT_KEY);
 
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
+      if (!sessionId) {
+        setPaid(false);
+        setMessage("Payment verification is required.");
+        return;
+      }
 
-    link.href = url;
-    link.download =
-      "raysnotes-copyright-application-summary.txt";
-    link.click();
+      setMessage("Preparing your PDF…");
 
-    URL.revokeObjectURL(url);
-    localStorage.removeItem(CREDIT_KEY);
-    setPaid(false);
-    setMessage(
-      "Application summary downloaded. This purchase has been used."
-    );
+      const response = await fetch(
+        "/api/assisted-copyright-pdf",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            sessionId,
+            summary,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const result = await response.json();
+        throw new Error(
+          result.error || "The PDF could not be downloaded."
+        );
+      }
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+
+      link.href = url;
+      link.download =
+        "raysnotes-copyright-application-summary.pdf";
+
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+
+      window.setTimeout(() => {
+        URL.revokeObjectURL(url);
+      }, 10000);
+
+      setMessage(
+        "PDF download started. Open your Downloads folder to check it."
+      );
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "The download failed. Please try again."
+      );
+    } 
+
   }
 
   function clearDraft() {
