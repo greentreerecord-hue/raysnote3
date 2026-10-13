@@ -102,9 +102,7 @@ export default function CopyrightPage() {
           `/api/copyright-payment?session_id=${encodeURIComponent(
             sessionId
           )}`,
-          {
-            cache: "no-store",
-          }
+          { cache: "no-store" }
         );
 
         const result = await response.json();
@@ -139,7 +137,6 @@ export default function CopyrightPage() {
 
   function saveRecords(nextRecords: CreationRecord[]) {
     setRecords(nextRecords);
-
     localStorage.setItem(
       RECORDS_KEY,
       JSON.stringify(nextRecords)
@@ -158,11 +155,7 @@ export default function CopyrightPage() {
       return;
     }
 
-    if (
-      !creator.trim() ||
-      !title.trim() ||
-      !creationDate
-    ) {
+    if (!creator.trim() || !title.trim() || !creationDate) {
       setNotice(
         "Creator name, work title, and creation date are required."
       );
@@ -228,9 +221,7 @@ export default function CopyrightPage() {
         "Creation record saved privately on this device."
       );
     } catch {
-      setNotice(
-        "The creation record could not be created."
-      );
+      setNotice("The creation record could not be created.");
     } finally {
       setSaving(false);
     }
@@ -289,15 +280,11 @@ https://www.copyright.gov/registration/
       "Delete this private record from this browser?"
     );
 
-    if (!confirmed) {
-      return;
-    }
+    if (!confirmed) return;
 
-    const remainingRecords = records.filter(
-      (record) => record.id !== recordId
+    saveRecords(
+      records.filter((record) => record.id !== recordId)
     );
-
-    saveRecords(remainingRecords);
   }
 
   return (
@@ -321,6 +308,35 @@ https://www.copyright.gov/registration/
             for your original work.
           </p>
         </div>
+      </section>
+
+      <section
+        style={{
+          maxWidth: "1050px",
+          margin: "0 auto 24px",
+          padding: "28px",
+          color: "#111827",
+          textAlign: "center",
+          background: "#eef2ff",
+          border: "3px solid #8b5cf6",
+          borderRadius: "22px",
+        }}
+      >
+        <p style={{ color: "#6d28d9", fontWeight: 900 }}>
+          COMING SOON
+        </p>
+
+        <h2>AI Copyright Risk Scan</h2>
+
+        <p>
+          Check text and images for potential copyright
+          concerns and receive an automated findings report.
+        </p>
+
+        <p>
+          Results are informational and do not guarantee
+          legal clearance.
+        </p>
       </section>
 
       <section className="warning">
@@ -480,7 +496,7 @@ https://www.copyright.gov/registration/
         {notice && <p className="notice">{notice}</p>}
       </section>
 
- <section
+      <section
         style={{
           maxWidth: "1050px",
           margin: "0 auto 24px",
@@ -514,7 +530,8 @@ https://www.copyright.gov/registration/
           Start Assisted Copyright Application
         </Link>
       </section>
- <section
+
+      <section
         style={{
           maxWidth: "1050px",
           margin: "0 auto 24px",
@@ -565,15 +582,14 @@ https://www.copyright.gov/registration/
         >
           Start Full-Service Group Filing — $159
         </Link>
-      </section> 
-    
-<section className="records">
+      </section>
+
+      <section className="records">
         <h2>My Saved Creation Records</h2>
 
         {records.length === 0 ? (
           <p>
-            No creation records are saved in this browser
-            yet.
+            No creation records are saved in this browser yet.
           </p>
         ) : (
           records.map((record) => (
@@ -585,22 +601,15 @@ https://www.copyright.gov/registration/
               <h3>{record.title}</h3>
               <h4>Created by {record.creator}</h4>
 
-              <p>
-                Creation date: {record.creationDate}
-              </p>
+              <p>Creation date: {record.creationDate}</p>
 
               <p>
                 Recorded:{" "}
-                {new Date(
-                  record.recordedAt
-                ).toLocaleString()}
+                {new Date(record.recordedAt).toLocaleString()}
               </p>
 
               <div className="hash">
-                <strong>
-                  SHA-256 record fingerprint
-                </strong>
-
+                <strong>SHA-256 record fingerprint</strong>
                 <code>{record.recordHash}</code>
               </div>
 
@@ -631,11 +640,7 @@ https://www.copyright.gov/registration/
           padding: 28px;
           color: white;
           font-family: Arial, sans-serif;
-          background: linear-gradient(
-            145deg,
-            #050816,
-            #14245b
-          );
+          background: linear-gradient(145deg, #050816, #14245b);
         }
 
         .homeButton,
@@ -670,11 +675,7 @@ https://www.copyright.gov/registration/
           align-items: center;
           gap: 24px;
           border: 3px solid #20df78;
-          background: linear-gradient(
-            120deg,
-            #102d64,
-            #32175c
-          );
+          background: linear-gradient(120deg, #102d64, #32175c);
         }
 
         .copyrightSymbol {
@@ -880,4 +881,3 @@ https://www.copyright.gov/registration/
     </main>
   );
 } 
-
