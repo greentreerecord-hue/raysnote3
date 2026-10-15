@@ -6,7 +6,7 @@ import type { FormEvent } from "react";
 
 const STORAGE_KEY = "raysnotes-assisted-copyright-application";
 const CREDIT_KEY = "raysnotes-assisted-application-credit";
-const PAYMENT_LINK = "https://buy.stripe.com/8x2eVdf3kbcb9jQ2HD2Nq06";
+const PAYMENT_LINK = "https://buy.stripe.com/dRmfZhaFJ7TpgBydPF7IY00"; 
 
 type ApplicationData = {
   workType: string;
