@@ -1,13 +1,12 @@
 import { NextResponse } from "next/server";
 import postgres from "postgres";
 import { head } from "@vercel/blob";
-import { getStripe } from "../../lib/stripe";
+import { randomUUID } from "node:crypto";
+import { verifyGroupFilingPayment } from
+  "../../lib/group-filing-payment";
 
+export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const EXPECTED_AMOUNT = 15900;
-const EXPECTED_PRODUCT =
-  "Ray'sNotes Full-Service Group Copyright Filing";
 
 type DepositFile = {
   name: string;
@@ -16,19 +15,28 @@ type DepositFile = {
   contentType: string;
 };
 
+function json(body: object, status = 200) {
+  return NextResponse.json(body, {
+    status,
+    headers: { "Cache-Control": "no-store" },
+  });
+}
+
 export async function POST(request: Request) {
   const connectionString =
     process.env.RAYSSTREAM_DB_DATABASE_URL;
 
   if (!connectionString) {
-    return NextResponse.json(
+    return json(
       { error: "Database connection is unavailable." },
-      { status: 500 }
+      500
     );
   }
 
   const sql = postgres(connectionString, {
     ssl: "require",
+    max: 1,
+    prepare: false,
   });
 
   try {
@@ -36,49 +44,39 @@ export async function POST(request: Request) {
 
     const sessionId = String(body.sessionId || "");
     const authorName = String(body.authorName || "").trim();
-    const claimantName = String(
-      body.claimantName || ""
-    ).trim();
-    const citizenship = String(
-      body.citizenship || ""
-    ).trim();
-    const workForHire = String(
-      body.workForHire || ""
-    ).trim();
-    const authorshipType = String(
-      body.authorshipType || ""
-    ).trim();
+    const claimantName = String(body.claimantName || "").trim();
+    const citizenship = String(body.citizenship || "").trim();
+    const workForHire = String(body.workForHire || "").trim();
+    const authorshipType = String(body.authorshipType || "").trim();
     const notes = String(body.notes || "").trim();
-    const email = String(body.email || "")
-      .trim()
-      .toLowerCase();
+    const email = String(body.email || "").trim().toLowerCase();
     const phone = String(body.phone || "").trim();
     const address = String(body.address || "").trim();
     const signature = String(body.signature || "").trim();
 
-    const songTitles = Array.isArray(body.songTitles)
+    const songTitles: string[] = Array.isArray(body.songTitles)
       ? body.songTitles
           .map((title: unknown) => String(title).trim())
           .filter(Boolean)
       : [];
 
-    const depositFiles: DepositFile[] = Array.isArray(
-      body.depositFiles
-    )
-      ? body.depositFiles.map((file: DepositFile) => ({
-          name: String(file.name || "").trim(),
-          pathname: String(file.pathname || "").trim(),
-          url: String(file.url || "").trim(),
-          contentType: String(
-            file.contentType || ""
-          ).trim(),
-        }))
-      : [];
+    const depositFiles: DepositFile[] =
+      Array.isArray(body.depositFiles)
+        ? body.depositFiles.map((file: DepositFile) => ({
+            name: String(file.name || "").trim(),
+            pathname: String(file.pathname || "").trim(),
+            url: String(file.url || "").trim(),
+            contentType: String(file.contentType || "").trim(),
+          }))
+        : [];
 
-    if (!sessionId.startsWith("cs_")) {
-      return NextResponse.json(
+    if (
+      !sessionId.startsWith("cs_") ||
+      sessionId.length > 300
+    ) {
+      return json(
         { error: "A valid payment session is required." },
-        { status: 400 }
+        400
       );
     }
 
@@ -93,26 +91,40 @@ export async function POST(request: Request) {
       !address ||
       !signature
     ) {
-      return NextResponse.json(
+      return json(
         { error: "Please complete every required field." },
-        { status: 400 }
+        400
       );
     }
 
-    if (songTitles.length < 1 || songTitles.length > 10) {
-      return NextResponse.json(
-        { error: "Enter between 1 and 10 song titles." },
-        { status: 400 }
+    if (
+      songTitles.length < 1 ||
+      songTitles.length > 10 ||
+      songTitles.some((title) => title.length > 500)
+    ) {
+      return json(
+        { error: "Enter between 1 and 10 song titles, each under 501 characters." },
+        400
       );
     }
 
     if (depositFiles.length !== songTitles.length) {
-      return NextResponse.json(
+      return json(
         {
           error:
             "One private song file is required for every song title.",
         },
-        { status: 400 }
+        400
+      );
+    }
+
+    if (
+      new Set(depositFiles.map((file) => file.pathname)).size !==
+      depositFiles.length
+    ) {
+      return json(
+        { error: "Provide a separate upload for each song." },
+        400
       );
     }
 
@@ -120,83 +132,77 @@ export async function POST(request: Request) {
       body.eligibilityConfirmed !== true ||
       body.authorizationConfirmed !== true
     ) {
-      return NextResponse.json(
+      return json(
         { error: "Both confirmations are required." },
-        { status: 400 }
+        400
       );
     }
 
     if (
-      signature.toLowerCase() !==
-      authorName.toLowerCase()
+      signature.toLowerCase() !== authorName.toLowerCase()
     ) {
-      return NextResponse.json(
+      return json(
         {
           error:
             "The electronic signature must match the author's legal name.",
         },
-        { status: 400 }
+        400
       );
     }
 
-    const stripe = getStripe();
+    let upgradeId: string | null;
 
-    const session =
-      await stripe.checkout.sessions.retrieve(sessionId, {
-        expand: ["line_items.data.price.product"],
-      });
+    try {
+      const payment = await verifyGroupFilingPayment(
+        request,
+        sessionId
+      );
 
-    const correctProduct = session.line_items?.data.some(
-      (item) => {
-        const product = item.price?.product;
-
-        return (
-          typeof product === "object" &&
-          product !== null &&
-          "name" in product &&
-          product.name === EXPECTED_PRODUCT
-        );
-      }
-    );
-
-    if (
-      session.payment_status !== "paid" ||
-      session.amount_total !== EXPECTED_AMOUNT ||
-      session.currency?.toLowerCase() !== "usd" ||
-      !correctProduct
-    ) {
-      return NextResponse.json(
+      upgradeId = payment.upgradeId;
+    } catch {
+      return json(
         {
           error:
-            "Payment could not be verified for this filing request.",
+            "Payment could not be verified. Sign in to the purchasing account if you used preparation credit.",
         },
-        { status: 403 }
+        403
       );
     }
 
     for (const file of depositFiles) {
+      let uploadUrl: URL;
+
+      try {
+        uploadUrl = new URL(file.url);
+      } catch {
+        return json(
+          { error: "A private song upload is invalid." },
+          400
+        );
+      }
+
       if (
         !file.name ||
         !file.pathname.startsWith(
           `group-filing/${sessionId}/`
         ) ||
-        !file.url.startsWith("https://") ||
-        !file.url.includes(
-          ".private.blob.vercel-storage.com/"
+        uploadUrl.protocol !== "https:" ||
+        !uploadUrl.hostname.endsWith(
+          ".private.blob.vercel-storage.com"
         )
       ) {
-        return NextResponse.json(
+        return json(
           { error: "A private song upload is invalid." },
-          { status: 400 }
+          400
         );
       }
 
       const blobDetails = await head(file.url);
 
       if (blobDetails.pathname !== file.pathname) {
-        return NextResponse.json(
+        return json(
           { error: "A song upload could not be verified." },
-          { status: 400 }
+          400
         );
       }
     }
@@ -231,83 +237,129 @@ export async function POST(request: Request) {
       NOT NULL DEFAULT '[]'::jsonb
     `;
 
-    const existing = await sql<
-      { reference: string }[]
-    >`
-      SELECT reference
-      FROM group_filing_requests
-      WHERE stripe_session_id = ${sessionId}
-      LIMIT 1
-    `;
+    const result = await sql.begin(async (transaction) => {
+      if (upgradeId) {
+        const upgrades = await transaction<
+          { group_filing_reference: string | null }[]
+        >`
+          SELECT group_filing_reference
+          FROM raysnotes_application_upgrades
+          WHERE id = ${upgradeId}
+            AND stripe_session_id = ${sessionId}
+            AND paid_at IS NOT NULL
+          FOR UPDATE
+        `;
 
-    if (existing.length > 0) {
-      return NextResponse.json({
-        success: true,
-        reference: existing[0].reference,
-        existing: true,
-      });
-    }
+        if (!upgrades[0]) {
+          throw new Error("The paid upgrade was not found.");
+        }
 
-    const reference = `RN-GF-${Date.now()
-      .toString(36)
-      .toUpperCase()}`;
+        if (upgrades[0].group_filing_reference) {
+          return {
+            reference: upgrades[0].group_filing_reference,
+            existing: true,
+          };
+        }
+      }
 
-    await sql`
-      INSERT INTO group_filing_requests (
-        reference,
-        stripe_session_id,
-        author_name,
-        claimant_name,
-        citizenship,
-        work_for_hire,
-        song_titles,
-        deposit_files,
-        authorship_type,
-        notes,
-        email,
-        phone,
-        mailing_address,
-        electronic_signature,
-        eligibility_confirmed,
-        authorization_confirmed,
-        status
-      )
-      VALUES (
-        ${reference},
-        ${sessionId},
-        ${authorName},
-        ${claimantName},
-        ${citizenship},
-        ${workForHire},
-        ${JSON.stringify(songTitles)}::jsonb,
-        ${JSON.stringify(depositFiles)}::jsonb,
-        ${authorshipType},
-        ${notes || null},
-        ${email},
-        ${phone},
-        ${address},
-        ${signature},
-        ${true},
-        ${true},
-        ${"pending_review"}
-      )
-    `;
+      const reference =
+        `RN-GF-${randomUUID().toUpperCase()}`;
 
-    return NextResponse.json({
+      const inserted = await transaction<
+        { reference: string }[]
+      >`
+        INSERT INTO group_filing_requests (
+          reference,
+          stripe_session_id,
+          author_name,
+          claimant_name,
+          citizenship,
+          work_for_hire,
+          song_titles,
+          deposit_files,
+          authorship_type,
+          notes,
+          email,
+          phone,
+          mailing_address,
+          electronic_signature,
+          eligibility_confirmed,
+          authorization_confirmed,
+          status
+        )
+        VALUES (
+          ${reference},
+          ${sessionId},
+          ${authorName},
+          ${claimantName},
+          ${citizenship},
+          ${workForHire},
+          ${JSON.stringify(songTitles)}::jsonb,
+          ${JSON.stringify(depositFiles)}::jsonb,
+          ${authorshipType},
+          ${notes || null},
+          ${email},
+          ${phone},
+          ${address},
+          ${signature},
+          ${true},
+          ${true},
+          ${"pending_review"}
+        )
+        ON CONFLICT (stripe_session_id) DO NOTHING
+        RETURNING reference
+      `;
+
+      let savedReference = inserted[0]?.reference;
+
+      if (!savedReference) {
+        const existing = await transaction<
+          { reference: string }[]
+        >`
+          SELECT reference
+          FROM group_filing_requests
+          WHERE stripe_session_id = ${sessionId}
+          LIMIT 1
+        `;
+
+        savedReference = existing[0]?.reference;
+      }
+
+      if (!savedReference) {
+        throw new Error("The filing request could not be saved.");
+      }
+
+      if (upgradeId) {
+        await transaction`
+          UPDATE raysnotes_application_upgrades
+          SET
+            group_filing_reference = ${savedReference},
+            updated_at = NOW()
+          WHERE id = ${upgradeId}
+            AND stripe_session_id = ${sessionId}
+        `;
+      }
+
+      return {
+        reference: savedReference,
+        existing: inserted.length === 0,
+      };
+    });
+
+    return json({
       success: true,
-      reference,
+      reference: result.reference,
+      existing: result.existing,
     });
   } catch (error) {
     console.error("Group filing request error:", error);
 
-    return NextResponse.json(
+    return json(
       {
         error:
-          error instanceof Error
-            ? error.message
-            : "The filing request could not be submitted.",
+          "The filing request could not be submitted. Please try again.",
       },
-      { status: 500 }
+      500
     );
   } finally {
     await sql.end({ timeout: 5 });

@@ -18,7 +18,9 @@ export function getDatabase() {
     process.env.RAYSSTREAM_DB_DATABASE_URL;
 
   if (!connectionString) {
-    throw new Error("The applications database is not configured.");
+    throw new Error(
+      "The applications database is not configured."
+    );
   }
 
   if (!database) {
@@ -99,6 +101,29 @@ async function createTables() {
       identifier_hash TEXT PRIMARY KEY,
       attempts INTEGER NOT NULL DEFAULT 1,
       window_started_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+}
+
+export async function ensureApplicationUpgradeTable() {
+  await ensureApplicationTables();
+  const sql = getDatabase();
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS raysnotes_application_upgrades (
+      id TEXT PRIMARY KEY,
+      application_id TEXT NOT NULL UNIQUE
+        REFERENCES raysnotes_applications(id),
+      preparation_session_id TEXT NOT NULL UNIQUE,
+      stripe_session_id TEXT UNIQUE,
+      credit_cents INTEGER NOT NULL DEFAULT 2499
+        CHECK (credit_cents = 2499),
+      amount_due_cents INTEGER NOT NULL DEFAULT 13401
+        CHECK (amount_due_cents = 13401),
+      paid_at TIMESTAMPTZ,
+      group_filing_reference TEXT UNIQUE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `;
 }

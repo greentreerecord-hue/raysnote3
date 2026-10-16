@@ -4,13 +4,11 @@ import {
   type HandleUploadPresignedBody,
 } from "@vercel/blob/client";
 import { NextResponse } from "next/server";
-import { getStripe } from "../../lib/stripe";
+import { verifyGroupFilingPayment } from
+  "../../lib/group-filing-payment";
 
+export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const EXPECTED_AMOUNT = 15900;
-const EXPECTED_PRODUCT =
-  "Ray'sNotes Full-Service Group Copyright Filing";
 
 export async function POST(
   request: Request
@@ -27,7 +25,10 @@ export async function POST(
         const payload = JSON.parse(clientPayload || "{}");
         const sessionId = String(payload.sessionId || "");
 
-        if (!sessionId.startsWith("cs_")) {
+        if (
+          !sessionId.startsWith("cs_") ||
+          sessionId.length > 300
+        ) {
           throw new Error(
             "A valid payment session is required."
           );
@@ -41,35 +42,7 @@ export async function POST(
           throw new Error("Invalid upload location.");
         }
 
-        const stripe = getStripe();
-
-        const session =
-          await stripe.checkout.sessions.retrieve(sessionId, {
-            expand: ["line_items.data.price.product"],
-          });
-
-        const correctProduct =
-          session.line_items?.data.some((item) => {
-            const product = item.price?.product;
-
-            return (
-              typeof product === "object" &&
-              product !== null &&
-              "name" in product &&
-              product.name === EXPECTED_PRODUCT
-            );
-          });
-
-        if (
-          session.payment_status !== "paid" ||
-          session.amount_total !== EXPECTED_AMOUNT ||
-          session.currency?.toLowerCase() !== "usd" ||
-          !correctProduct
-        ) {
-          throw new Error(
-            "Payment could not be verified for this upload."
-          );
-        }
+        await verifyGroupFilingPayment(request, sessionId);
 
         const token = await issueSignedToken({
           pathname,
@@ -100,16 +73,21 @@ export async function POST(
       },
     });
 
-    return NextResponse.json(jsonResponse);
+    return NextResponse.json(jsonResponse, {
+      headers: { "Cache-Control": "no-store" },
+    });
   } catch (error) {
-    const message =
-      error instanceof Error
-        ? error.message
-        : "The secure upload could not be started.";
+    console.error("Group filing upload error:", error);
 
     return NextResponse.json(
-      { error: message },
-      { status: 400 }
+      {
+        error:
+          "The secure upload could not be started. Verify your payment and sign in if you purchased an upgrade.",
+      },
+      {
+        status: 400,
+        headers: { "Cache-Control": "no-store" },
+      }
     );
   }
 } 
