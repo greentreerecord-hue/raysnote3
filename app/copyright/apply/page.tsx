@@ -1,35 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import type { FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 
-const STORAGE_KEY = "raysnotes-assisted-copyright-application";
-const CREDIT_KEY = "raysnotes-assisted-application-credit";
-const PAYMENT_LINK = "https://buy.stripe.com/dRmfZhaFJ7TpgBydPF7IY00"; 
-
-type ApplicationData = {
-  workType: string;
-  title: string;
-  authorName: string;
-  pseudonym: string;
-  claimantName: string;
-  citizenship: string;
-  creationYear: string;
-  workForHire: string;
-  published: string;
-  publicationDate: string;
-  publicationCountry: string;
-  previousRegistration: string;
-  previousNumber: string;
-  preexistingMaterial: string;
-  newMaterial: string;
-  email: string;
-  phone: string;
-  address: string;
-};
-
-const emptyApplication: ApplicationData = {
+const emptyApplication = {
   workType: "Music and lyrics",
   title: "",
   authorName: "",
@@ -50,208 +24,202 @@ const emptyApplication: ApplicationData = {
   address: "",
 };
 
+type ApplicationData = typeof emptyApplication;
+type Field = keyof ApplicationData;
+
 export default function AssistedCopyrightApplicationPage() {
-  const [form, setForm] =
-    useState<ApplicationData>(emptyApplication);
+  const [form, setForm] = useState<ApplicationData>(emptyApplication);
+  const [applicationId, setApplicationId] = useState("");
   const [certified, setCertified] = useState(false);
   const [message, setMessage] = useState("");
   const [paid, setPaid] = useState(false);
   const [checking, setChecking] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [dirty, setDirty] = useState(false);
 
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
+    let active = true;
 
-      if (saved) {
-        setForm({
-          ...emptyApplication,
-          ...JSON.parse(saved),
-        });
-      }
-    } catch {
-      localStorage.removeItem(STORAGE_KEY);
-    }
+    async function load() {
+      const params = new URLSearchParams(window.location.search);
+      const id = params.get("application_id");
+      const sessionId = params.get("session_id");
 
-    async function verifyPayment() {
-      const sessionId = new URLSearchParams(
-        window.location.search
-      ).get("session_id");
-
-      if (!sessionId) {
-        setPaid(
-          Boolean(localStorage.getItem(CREDIT_KEY))
-        );
-        setChecking(false);
+      if (!id) {
+        window.location.replace("/my-applications");
         return;
       }
 
       try {
         const response = await fetch(
-          `/api/assisted-copyright-payment?session_id=${encodeURIComponent(
-            sessionId
-          )}`
+          `/api/my-applications?application_id=${encodeURIComponent(id)}`,
+          { cache: "no-store" }
         );
+
+        if (response.status === 401) {
+          window.location.replace("/my-applications");
+          return;
+        }
 
         const result = await response.json();
 
-        if (!response.ok || !result.paid) {
-          throw new Error(
-            result.error ||
-              "Payment could not be verified."
+        if (!response.ok) {
+          throw new Error(result.error || "Application could not be loaded.");
+        }
+
+        if (!active) return;
+
+        setApplicationId(id);
+        setForm({ ...emptyApplication, ...result.application.form });
+        setPaid(result.application.paid);
+
+        if (sessionId) {
+          const verification = await fetch("/api/application-payment", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ applicationId: id, sessionId }),
+          });
+
+          const payment = await verification.json();
+
+          if (!verification.ok || !payment.paid) {
+            throw new Error(
+              payment.error ||
+                "Payment could not be verified. Do not pay again."
+            );
+          }
+
+          if (!active) return;
+
+          setPaid(true);
+          setMessage("Payment verified for this application.");
+
+          window.history.replaceState(
+            {},
+            "",
+            `/copyright/apply?application_id=${encodeURIComponent(id)}`
           );
         }
-
-        localStorage.setItem(CREDIT_KEY, sessionId);
-        setPaid(true);
-        setMessage(
-          "Payment verified. The assisted application is unlocked."
-        );
-
-        window.history.replaceState(
-          {},
-          "",
-          "/copyright/apply"
-        );
       } catch (error) {
-        setMessage(
-          error instanceof Error
-            ? error.message
-            : "Payment could not be verified."
-        );
+        if (active) {
+          setMessage(
+            error instanceof Error ? error.message : "Please try again."
+          );
+        }
       } finally {
-        setChecking(false);
+        if (active) setChecking(false);
       }
     }
 
-    void verifyPayment();
+    void load();
+
+    return () => {
+      active = false;
+    };
   }, []);
 
-  function update(
-    field: keyof ApplicationData,
-    value: string
-  ) {
-    const next = {
-      ...form,
-      [field]: value,
-    };
+  useEffect(() => {
+    function warn(event: BeforeUnloadEvent) {
+      if (!dirty) return;
+      event.preventDefault();
+      event.returnValue = "";
+    }
 
-    setForm(next);
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify(next)
-    );
-    setMessage(
-      "Draft saved privately in this browser."
-    );
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
+
+  function update(field: Field, value: string) {
+    setForm((current) => ({ ...current, [field]: value }));
+    setDirty(true);
+    setMessage("Unsaved changes. Click Save Draft to keep them.");
   }
 
-  async function submit( 
-    event: FormEvent<HTMLFormElement>
-  ) {
-    event.preventDefault();
-
-    if (!paid) {
-      setMessage(
-        "Complete payment to unlock the application summary."
-      );
-      return;
+  async function persistDraft() {
+    if (!applicationId) {
+      throw new Error("Open an application from My Applications first.");
     }
 
-    if (!certified) {
-      setMessage(
-        "Please confirm that the information is accurate."
-      );
-      return;
+    const response = await fetch("/api/my-applications", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ applicationId, form }),
+    });
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(result.error || "Your draft could not be saved.");
     }
 
-    const summary = `RAY'SNOTES ASSISTED COPYRIGHT APPLICATION SUMMARY
-=================================================
+    setDirty(false);
+  }
 
-This is an application-preparation summary. It is not a copyright
-registration and has not been submitted to the U.S. Copyright Office.
-
-WORK INFORMATION
-Work type: ${form.workType}
-Title: ${form.title}
-Year completed: ${form.creationYear}
-Published: ${form.published}
-First publication date: ${
-      form.publicationDate || "Not applicable"
-    }
-First publication country: ${
-      form.publicationCountry || "Not applicable"
-    }
-
-AUTHOR AND CLAIMANT
-Author's legal name: ${form.authorName}
-Pseudonym or stage name: ${
-      form.pseudonym || "None"
-    }
-Copyright claimant: ${form.claimantName}
-Citizenship or domicile: ${form.citizenship}
-Work made for hire: ${form.workForHire}
-
-PREVIOUS WORK AND NEW MATERIAL
-Previously registered: ${
-      form.previousRegistration
-    }
-Previous registration number: ${
-      form.previousNumber || "None"
-    }
-Preexisting material excluded from this claim: ${
-      form.preexistingMaterial || "None stated"
-    }
-New material included in this claim: ${
-      form.newMaterial || "Not stated"
-    }
-
-CONTACT INFORMATION
-Email: ${form.email}
-Phone: ${form.phone || "Not provided"}
-Mailing address: ${form.address}
-
-NEXT STEPS
-1. Review every answer carefully.
-2. Choose the correct Copyright Office application type.
-3. Sign in to the official eCO registration system.
-4. Enter the information, upload the required deposit copy, pay the
-   separate government filing fee, certify, and submit the application.
-
-Official portal: https://www.copyright.gov/registration/
-
-Ray'sNotes does not guarantee registration and does not provide legal advice.
-`;
+  async function saveDraft() {
+    setBusy(true);
+    setMessage("Saving your draft…");
 
     try {
-      const sessionId = localStorage.getItem(CREDIT_KEY);
+      await persistDraft();
+      setMessage("Draft saved to your account.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Save failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
-      if (!sessionId) {
-        setPaid(false);
-        setMessage("Payment verification is required.");
-        return;
+  async function purchase() {
+    setBusy(true);
+    setMessage("Saving your draft and opening checkout…");
+
+    try {
+      await persistDraft();
+
+      const response = await fetch("/api/application-checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ applicationId }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.url) {
+        throw new Error(result.error || "Checkout could not be opened.");
       }
 
-      setMessage("Preparing your PDF…");
-
-      const response = await fetch(
-        "/api/assisted-copyright-pdf",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            sessionId,
-            summary,
-          }),
-        }
+      window.location.assign(result.url);
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : "Checkout failed."
       );
+      setBusy(false);
+    }
+  }
+
+  async function download(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!paid || !certified) {
+      setMessage("Payment and your accuracy confirmation are required.");
+      return;
+    }
+
+    setBusy(true);
+    setMessage("Preparing your PDF…");
+
+    try {
+      await persistDraft();
+
+      const response = await fetch("/api/application-pdf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ applicationId, certified: true }),
+      });
 
       if (!response.ok) {
         const result = await response.json();
-        throw new Error(
-          result.error || "The PDF could not be downloaded."
-        );
+        throw new Error(result.error || "Your PDF could not be downloaded.");
       }
 
       const blob = await response.blob();
@@ -259,703 +227,288 @@ Ray'sNotes does not guarantee registration and does not provide legal advice.
       const link = document.createElement("a");
 
       link.href = url;
-      link.download =
-        "raysnotes-copyright-application-summary.pdf";
-
+      link.download = "raysnotes-copyright-application-summary.pdf";
       document.body.appendChild(link);
       link.click();
       link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 10000);
 
-      window.setTimeout(() => {
-        URL.revokeObjectURL(url);
-      }, 10000);
-
-      setMessage(
-        "PDF download started. Open your Downloads folder to check it."
-      );
+      setMessage("PDF downloaded. Check your Downloads folder.");
     } catch (error) {
       setMessage(
-        error instanceof Error
-          ? error.message
-          : "The download failed. Please try again."
+        error instanceof Error ? error.message : "Download failed."
       );
-    } 
-
+    } finally {
+      setBusy(false);
+    }
   }
 
-  function clearDraft() {
-    if (
-      !window.confirm(
-        "Clear this application draft from this browser?"
-      )
-    ) {
-      return;
-    }
+  function input(
+    field: Field,
+    label: string,
+    required = true,
+    type = "text"
+  ) {
+    return (
+      <label key={field}>
+        {label}
+        <input
+          type={type}
+          value={form[field]}
+          onChange={(event) => update(field, event.target.value)}
+          maxLength={field === "title" ? 300 : 5000}
+          required={required}
+          {...(type === "number" ? { min: 1900, max: 2100 } : {})}
+        />
+      </label>
+    );
+  }
 
-    localStorage.removeItem(STORAGE_KEY);
-    setForm(emptyApplication);
-    setCertified(false);
-    setMessage("Draft cleared.");
+  function select(field: Field, label: string, options: string[]) {
+    return (
+      <label key={field}>
+        {label}
+        <select
+          value={form[field]}
+          onChange={(event) => update(field, event.target.value)}
+        >
+          {options.map((option) => (
+            <option key={option}>{option}</option>
+          ))}
+        </select>
+      </label>
+    );
+  }
+
+  function textArea(field: Field, label: string, required = false) {
+    return (
+      <label key={field}>
+        {label}
+        <textarea
+          value={form[field]}
+          onChange={(event) => update(field, event.target.value)}
+          maxLength={5000}
+          rows={4}
+          required={required}
+        />
+      </label>
+    );
   }
 
   return (
     <main className="page">
       <div className="container">
-        <Link className="back" href="/copyright">
-          ← Copyright Center
-        </Link>
+        <nav>
+          <Link href="/my-applications">← My Applications</Link>
+          <Link href="/copyright">Copyright Center</Link>
+        </nav>
 
-        <header className="hero">
-          <p className="eyebrow">
-            GUIDED APPLICATION PREPARATION
-          </p>
-
+        <header>
+          <p className="eyebrow">GUIDED APPLICATION PREPARATION</p>
           <h1>Assisted Copyright Application</h1>
-
-          <p>
-            Answer each question to prepare a
-            downloadable filing summary.
-          </p>
+          <p>Prepare and save a separate summary for each work.</p>
         </header>
 
         <section className="notice">
           <h2>Before you begin</h2>
-
           <p>
-            This service prepares information only. It
-            does not file an application, provide legal
-            advice, guarantee registration, or include
-            the U.S. Copyright Office filing fee.
+            This service prepares information only. It does not file an
+            application, provide legal advice, guarantee registration, or
+            include the U.S. Copyright Office filing fee.
           </p>
         </section>
 
-        <section
-          className={`payment ${
-            paid ? "paymentPaid" : ""
-          }`}
-        >
-          <h2>
-            Assisted Application — $24.99
-          </h2>
+        {message && <p className="message" role="status">{message}</p>}
 
-          {checking ? (
-            <p>Checking payment status…</p>
-          ) : paid ? (
-            <p>
-              ✓ Payment verified. Your application form
-              is unlocked.
-            </p>
-          ) : (
-            <>
-              <p>
-                One payment unlocks one downloadable
-                application summary.
-              </p>
-
-              <a href={PAYMENT_LINK}>
-                Purchase Assisted Application — $24.99
-              </a>
-            </>
-          )}
-        </section>
-
-        <form onSubmit={submit}>
-          <fieldset disabled={!paid || checking}>
-            <section className="card">
-              <h2>1. Work information</h2>
-
-              <div className="grid">
-                <label>
-                  Type of work
-
-                  <select
-                    value={form.workType}
-                    onChange={(event) =>
-                      update(
-                        "workType",
-                        event.target.value
-                      )
-                    }
-                  >
-                    <option>Music and lyrics</option>
-                    <option>Sound recording</option>
-                    <option>
-                      Writing or literary work
-                    </option>
-                    <option>Photograph</option>
-                    <option>Visual artwork</option>
-                    <option>
-                      Video or motion picture
-                    </option>
-                    <option>
-                      Software or computer program
-                    </option>
-                    <option>Other</option>
-                  </select>
-                </label>
-
-                <label>
-                  Title of the work
-
-                  <input
-                    value={form.title}
-                    onChange={(event) =>
-                      update(
-                        "title",
-                        event.target.value
-                      )
-                    }
-                    required
-                  />
-                </label>
-
-                <label>
-                  Year the work was completed
-
-                  <input
-                    type="number"
-                    min="1900"
-                    max="2100"
-                    value={form.creationYear}
-                    onChange={(event) =>
-                      update(
-                        "creationYear",
-                        event.target.value
-                      )
-                    }
-                    required
-                  />
-                </label>
-
-                <label>
-                  Has the work been published?
-
-                  <select
-                    value={form.published}
-                    onChange={(event) =>
-                      update(
-                        "published",
-                        event.target.value
-                      )
-                    }
-                  >
-                    <option>No</option>
-                    <option>Yes</option>
-                    <option>Not sure</option>
-                  </select>
-                </label>
-
-                {form.published === "Yes" && (
-                  <>
-                    <label>
-                      Date first published
-
-                      <input
-                        type="date"
-                        value={form.publicationDate}
-                        onChange={(event) =>
-                          update(
-                            "publicationDate",
-                            event.target.value
-                          )
-                        }
-                        required
-                      />
-                    </label>
-
-                    <label>
-                      Country first published
-
-                      <input
-                        value={
-                          form.publicationCountry
-                        }
-                        onChange={(event) =>
-                          update(
-                            "publicationCountry",
-                            event.target.value
-                          )
-                        }
-                        required
-                      />
-                    </label>
-                  </>
-                )}
-              </div>
-            </section>
-
-            <section className="card">
-              <h2>2. Author and claimant</h2>
-
-              <div className="grid">
-                <label>
-                  Author&apos;s full legal name
-
-                  <input
-                    value={form.authorName}
-                    onChange={(event) =>
-                      update(
-                        "authorName",
-                        event.target.value
-                      )
-                    }
-                    required
-                  />
-                </label>
-
-                <label>
-                  Pseudonym or stage name (optional)
-
-                  <input
-                    value={form.pseudonym}
-                    onChange={(event) =>
-                      update(
-                        "pseudonym",
-                        event.target.value
-                      )
-                    }
-                  />
-                </label>
-
-                <label>
-                  Copyright claimant&apos;s legal name
-
-                  <input
-                    value={form.claimantName}
-                    onChange={(event) =>
-                      update(
-                        "claimantName",
-                        event.target.value
-                      )
-                    }
-                    required
-                  />
-                </label>
-
-                <label>
-                  Author&apos;s citizenship or domicile
-
-                  <input
-                    value={form.citizenship}
-                    onChange={(event) =>
-                      update(
-                        "citizenship",
-                        event.target.value
-                      )
-                    }
-                    required
-                  />
-                </label>
-
-                <label>
-                  Was this created as a work made for
-                  hire?
-
-                  <select
-                    value={form.workForHire}
-                    onChange={(event) =>
-                      update(
-                        "workForHire",
-                        event.target.value
-                      )
-                    }
-                  >
-                    <option>No</option>
-                    <option>Yes</option>
-                    <option>Not sure</option>
-                  </select>
-                </label>
-              </div>
-            </section>
-
-            <section className="card">
-              <h2>3. Previous and new material</h2>
-
-              <div className="grid">
-                <label>
-                  Was this work previously registered?
-
-                  <select
-                    value={form.previousRegistration}
-                    onChange={(event) =>
-                      update(
-                        "previousRegistration",
-                        event.target.value
-                      )
-                    }
-                  >
-                    <option>No</option>
-                    <option>Yes</option>
-                    <option>Not sure</option>
-                  </select>
-                </label>
-
-                {form.previousRegistration ===
-                  "Yes" && (
-                  <label>
-                    Previous registration number
-
-                    <input
-                      value={form.previousNumber}
-                      onChange={(event) =>
-                        update(
-                          "previousNumber",
-                          event.target.value
-                        )
-                      }
-                      required
-                    />
-                  </label>
-                )}
-              </div>
-
-              <label>
-                Describe any preexisting material not
-                owned by the claimant
-
-                <textarea
-                  rows={4}
-                  value={form.preexistingMaterial}
-                  onChange={(event) =>
-                    update(
-                      "preexistingMaterial",
-                      event.target.value
-                    )
-                  }
-                  placeholder="For example: licensed beat, stock photograph, public-domain text, or previously published material."
-                />
-              </label>
-
-              <label>
-                Describe the new material being claimed
-
-                <textarea
-                  rows={4}
-                  value={form.newMaterial}
-                  onChange={(event) =>
-                    update(
-                      "newMaterial",
-                      event.target.value
-                    )
-                  }
-                  placeholder="For example: lyrics, music, vocals, editing, illustrations, text, or computer code."
-                />
-              </label>
-            </section>
-
-            <section className="card">
-              <h2>4. Contact information</h2>
-
-              <div className="grid">
-                <label>
-                  Email address
-
-                  <input
-                    type="email"
-                    value={form.email}
-                    onChange={(event) =>
-                      update(
-                        "email",
-                        event.target.value
-                      )
-                    }
-                    required
-                  />
-                </label>
-
-                <label>
-                  Phone number (optional)
-
-                  <input
-                    type="tel"
-                    value={form.phone}
-                    onChange={(event) =>
-                      update(
-                        "phone",
-                        event.target.value
-                      )
-                    }
-                  />
-                </label>
-              </div>
-
-              <label>
-                Mailing address
-
-                <textarea
-                  rows={3}
-                  value={form.address}
-                  onChange={(event) =>
-                    update(
-                      "address",
-                      event.target.value
-                    )
-                  }
-                  required
-                />
-              </label>
-            </section>
-
-            <section className="card finalCard">
-              <label className="check">
-                <input
-                  type="checkbox"
-                  checked={certified}
-                  onChange={(event) =>
-                    setCertified(
-                      event.target.checked
-                    )
-                  }
-                />
-
-                I confirm that the information I entered
-                is accurate to the best of my knowledge.
-              </label>
-
-              <div className="actions">
-                <button type="submit">
-                  Download Application Summary
-                </button>
-
-                <button
-                  type="button"
-                  className="clear"
-                  onClick={clearDraft}
-                >
-                  Clear Draft
-                </button>
-              </div>
-
-              {message && (
-                <p className="message">{message}</p>
+        {checking ? (
+          <p>Loading your application…</p>
+        ) : !applicationId ? (
+          <section className="card">
+            <p>Return to My Applications to open your saved work.</p>
+            <Link href="/my-applications">My Applications</Link>
+          </section>
+        ) : (
+          <>
+            <section className={`payment ${paid ? "paymentPaid" : ""}`}>
+              <h2>Assisted Application — $24.99</h2>
+              {paid ? (
+                <p>✓ Payment received for this application.</p>
+              ) : (
+                <>
+                  <p>
+                    Save your draft now. Payment unlocks this application’s
+                    downloadable summary.
+                  </p>
+                  <button type="button" disabled={busy} onClick={purchase}>
+                    Purchase Assisted Application — $24.99
+                  </button>
+                </>
               )}
             </section>
-          </fieldset>
-        </form>
 
-        <section className="official">
-          <h2>Ready to file?</h2>
+            <form onSubmit={download}>
+              <fieldset disabled={busy}>
+                <section className="card">
+                  <h2>1. Work information</h2>
+                  <div className="grid">
+                    {select("workType", "Type of work", [
+                      "Music and lyrics",
+                      "Sound recording",
+                      "Writing or literary work",
+                      "Photograph",
+                      "Visual artwork",
+                      "Video or motion picture",
+                      "Software or computer program",
+                      "Other",
+                    ])}
+                    {input("title", "Title of the work")}
+                    {input("creationYear", "Year completed", true, "number")}
+                    {select("published", "Has the work been published?", [
+                      "No", "Yes", "Not sure",
+                    ])}
+                    {form.published === "Yes" && (
+                      <>
+                        {input("publicationDate", "Date first published", true, "date")}
+                        {input("publicationCountry", "Country first published")}
+                      </>
+                    )}
+                  </div>
+                </section>
 
-          <p>
-            Review your downloaded summary, then use the
-            official registration portal.
-          </p>
+                <section className="card">
+                  <h2>2. Author and claimant</h2>
+                  <div className="grid">
+                    {input("authorName", "Author’s full legal name")}
+                    {input("pseudonym", "Pseudonym or stage name (optional)", false)}
+                    {input("claimantName", "Copyright claimant’s legal name")}
+                    {input("citizenship", "Author’s citizenship or domicile")}
+                    {select("workForHire", "Work made for hire?", [
+                      "No", "Yes", "Not sure",
+                    ])}
+                  </div>
+                </section>
 
-          <a
-            href="https://www.copyright.gov/registration/"
-            target="_blank"
-            rel="noreferrer"
-          >
-            Open the U.S. Copyright Office portal ↗
-          </a>
-        </section>
+                <section className="card">
+                  <h2>3. Previous and new material</h2>
+                  <div className="grid">
+                    {select("previousRegistration", "Previously registered?", [
+                      "No", "Yes", "Not sure",
+                    ])}
+                    {form.previousRegistration === "Yes" &&
+                      input("previousNumber", "Previous registration number")}
+                  </div>
+                  {textArea("preexistingMaterial", "Preexisting material excluded (if any)")}
+                  {textArea("newMaterial", "New material included in this claim")}
+                </section>
+
+                <section className="card">
+                  <h2>4. Contact information</h2>
+                  <div className="grid">
+                    {input("email", "Email", true, "email")}
+                    {input("phone", "Phone (optional)", false, "tel")}
+                  </div>
+                  {textArea("address", "Mailing address", true)}
+                </section>
+
+                <section className="card">
+                  <h2>5. Review and download</h2>
+                  <label className="confirmation">
+                    <input
+                      type="checkbox"
+                      checked={certified}
+                      onChange={(event) => setCertified(event.target.checked)}
+                    />
+                    <span>
+                      I have reviewed my answers and confirm they are accurate
+                      to the best of my knowledge.
+                    </span>
+                  </label>
+
+                  <div className="actions">
+                    <button type="button" onClick={saveDraft}>
+                      Save Draft
+                    </button>
+                    <button type="submit" disabled={!paid || !certified}>
+                      Download PDF Summary
+                    </button>
+                  </div>
+
+                  <p>
+                    {dirty ? "You have unsaved changes." : "Your draft is saved."}
+                    {!paid && " Payment is required to download."}
+                  </p>
+                </section>
+              </fieldset>
+            </form>
+          </>
+        )}
       </div>
 
       <style jsx>{`
         .page {
           min-height: 100vh;
-          padding: 28px;
-          background: linear-gradient(
-            145deg,
-            #050816,
-            #172a68
-          );
-          color: #fff;
-          font-family: Arial, sans-serif;
+          padding: 32px 18px 70px;
+          background: #080f24;
+          color: #edf2ff;
         }
-
-        .container {
-          max-width: 1050px;
-          margin: auto;
-        }
-
-        .back,
-        .official a,
-        .payment a {
-          display: inline-block;
-          padding: 13px 18px;
-          border-radius: 11px;
-          color: #fff;
-          text-decoration: none;
-          font-weight: 900;
-        }
-
-        .back {
-          border: 2px solid #fff;
-          margin-bottom: 22px;
-        }
-
-        .hero {
-          padding: 32px;
-          border: 3px solid #22df7d;
-          border-radius: 22px;
-          background: linear-gradient(
-            120deg,
-            #10346c,
-            #391760
-          );
-        }
-
-        .eyebrow {
-          color: #35f394;
-          font-weight: 900;
-          letter-spacing: 2px;
-        }
-
-        .hero h1 {
-          font-size: clamp(36px, 6vw, 68px);
-          margin: 8px 0;
-        }
-
-        .notice,
-        .payment,
-        .card,
-        .official {
-          margin-top: 22px;
+        .container { max-width: 1100px; margin: auto; }
+        nav { display: flex; flex-wrap: wrap; gap: 24px; }
+        header { padding: 32px 0; }
+        h1 { font-size: clamp(30px, 5vw, 48px); margin: 12px 0; }
+        h2 { margin-top: 0; }
+        p { line-height: 1.6; }
+        .eyebrow { color: #67e8f9; letter-spacing: 2px; }
+        .notice, .card, .payment {
           padding: 26px;
-          border-radius: 20px;
+          border-radius: 16px;
+          margin: 22px 0;
+          background: #14203a;
+          border: 1px solid #405371;
         }
-
-        .notice {
-          background: #fff4d6;
-          color: #332000;
-          border: 3px solid #ffae24;
+        .notice { border-color: #e4a451; }
+        .payment { text-align: center; border-color: #38bdf8; }
+        .paymentPaid { border-color: #34d399; }
+        .message {
+          padding: 18px;
+          background: #243650;
+          border-radius: 10px;
+          overflow-wrap: anywhere;
         }
-
-        .payment {
-          background: #e8f2ff;
-          color: #07111f;
-          border: 3px solid #1769e0;
-          text-align: center;
-        }
-
-        .paymentPaid {
-          background: #e8fff1;
-          border-color: #0aa85b;
-        }
-
-        .payment h2 {
-          margin-top: 0;
-        }
-
-        .payment a {
-          background: #1769e0;
-        }
-
-        .card {
-          background: #fff;
-          color: #111;
-          border: 3px solid #25cfd0;
-        }
-
-        .card h2,
-        .notice h2,
-        .official h2 {
-          margin-top: 0;
-        }
-
-        fieldset {
-          border: 0;
-          margin: 0;
-          padding: 0;
-          min-width: 0;
-        }
-
-        fieldset:disabled {
-          opacity: 0.52;
-        }
-
+        fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
         .grid {
           display: grid;
-          grid-template-columns: repeat(
-            auto-fit,
-            minmax(260px, 1fr)
-          );
-          gap: 18px;
+          grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+          gap: 20px;
         }
-
-        label {
-          display: flex;
-          flex-direction: column;
-          gap: 8px;
-          margin-bottom: 18px;
-          font-weight: 800;
-        }
-
-        input,
-        select,
-        textarea {
+        label { display: block; margin: 12px 0; font-weight: 600; }
+        input, select, textarea {
+          display: block;
+          width: 100%;
+          box-sizing: border-box;
           padding: 13px;
-          border: 2px solid #334155;
-          border-radius: 10px;
-          background: #fff;
+          margin-top: 9px;
+          border-radius: 8px;
+          border: 1px solid #71829e;
+          background: #080f24;
+          color: white;
           font: inherit;
+          color-scheme: dark;
         }
-
-        .check {
-          display: flex;
-          flex-direction: row;
-          align-items: flex-start;
-        }
-
-        .check input {
-          width: 22px;
-          height: 22px;
-        }
-
-        .actions {
-          display: flex;
-          gap: 12px;
-          flex-wrap: wrap;
-        }
-
+        textarea { resize: vertical; }
         button {
-          padding: 15px 20px;
+          padding: 14px 20px;
           border: 0;
           border-radius: 10px;
-          background: #0aa85b;
-          color: #fff;
+          background: #67e8f9;
+          color: #082033;
           font: inherit;
-          font-weight: 900;
+          font-weight: 700;
           cursor: pointer;
         }
-
-        .clear {
-          background: #b42318;
-        }
-
-        .message {
-          padding: 13px;
-          background: #e6f4ff;
-          color: #064b89;
-          border-radius: 10px;
-          font-weight: 800;
-        }
-
-        .official {
-          text-align: center;
-          background: #ecfeff;
-          color: #07111f;
-          border: 3px solid #20d978;
-        }
-
-        .official a {
-          background: #1769e0;
-        }
-
-        @media (max-width: 600px) {
-          .page {
-            padding: 15px;
-          }
-
-          .hero,
-          .notice,
-          .payment,
-          .card,
-          .official {
-            padding: 20px;
-          }
-        }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        .actions { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 24px; }
+        .confirmation { display: flex; align-items: flex-start; gap: 12px; }
+        .confirmation input { width: 20px; height: 20px; margin: 2px 0; flex-shrink: 0; }
       `}</style>
     </main>
   );
