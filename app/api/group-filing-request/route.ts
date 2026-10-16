@@ -103,7 +103,10 @@ export async function POST(request: Request) {
       songTitles.some((title) => title.length > 500)
     ) {
       return json(
-        { error: "Enter between 1 and 10 song titles, each under 501 characters." },
+        {
+          error:
+            "Enter between 1 and 10 song titles, each under 501 characters.",
+        },
         400
       );
     }
@@ -151,6 +154,7 @@ export async function POST(request: Request) {
     }
 
     let upgradeId: string | null;
+    let linkedApplicationId: string | null;
 
     try {
       const payment = await verifyGroupFilingPayment(
@@ -158,7 +162,24 @@ export async function POST(request: Request) {
         sessionId
       );
 
+      if (
+        payment.upgradeId &&
+        (
+          body.applicationId !== payment.applicationId ||
+          body.sameWorkConfirmed !== true
+        )
+      ) {
+        return json(
+          {
+            error:
+              "Confirm that this filing covers the same work as your preparation application.",
+          },
+          400
+        );
+      }
+
       upgradeId = payment.upgradeId;
+      linkedApplicationId = payment.applicationId;
     } catch {
       return json(
         {
@@ -238,28 +259,52 @@ export async function POST(request: Request) {
     `;
 
     const result = await sql.begin(async (transaction) => {
+      let reviewNotes = notes;
+
       if (upgradeId) {
         const upgrades = await transaction<
-          { group_filing_reference: string | null }[]
+          {
+            group_filing_reference: string | null;
+            preparation_title: string;
+          }[]
         >`
-          SELECT group_filing_reference
-          FROM raysnotes_application_upgrades
-          WHERE id = ${upgradeId}
-            AND stripe_session_id = ${sessionId}
-            AND paid_at IS NOT NULL
-          FOR UPDATE
+          SELECT
+            upgrades.group_filing_reference,
+            applications.title AS preparation_title
+          FROM raysnotes_application_upgrades AS upgrades
+          JOIN raysnotes_applications AS applications
+            ON applications.id = upgrades.application_id
+          WHERE upgrades.id = ${upgradeId}
+            AND upgrades.application_id = ${linkedApplicationId}
+            AND upgrades.stripe_session_id = ${sessionId}
+            AND upgrades.paid_at IS NOT NULL
+          FOR UPDATE OF upgrades
         `;
 
-        if (!upgrades[0]) {
+        const upgrade = upgrades[0];
+
+        if (!upgrade) {
           throw new Error("The paid upgrade was not found.");
         }
 
-        if (upgrades[0].group_filing_reference) {
+        if (upgrade.group_filing_reference) {
           return {
-            reference: upgrades[0].group_filing_reference,
+            reference: upgrade.group_filing_reference,
             existing: true,
           };
         }
+
+        reviewNotes = [
+          "PREPARATION CREDIT UPGRADE",
+          `Linked application: ${linkedApplicationId}`,
+          `Preparation title: ${upgrade.preparation_title}`,
+          "Preparation credit: $24.99",
+          "Upgrade payment: $134.01",
+          "Customer confirmed these songs belong to the same work or album.",
+          "Review the linked work and all group filing eligibility requirements.",
+          "",
+          notes,
+        ].join("\n");
       }
 
       const reference =
@@ -297,7 +342,7 @@ export async function POST(request: Request) {
           ${JSON.stringify(songTitles)}::jsonb,
           ${JSON.stringify(depositFiles)}::jsonb,
           ${authorshipType},
-          ${notes || null},
+          ${reviewNotes || null},
           ${email},
           ${phone},
           ${address},
@@ -326,7 +371,9 @@ export async function POST(request: Request) {
       }
 
       if (!savedReference) {
-        throw new Error("The filing request could not be saved.");
+        throw new Error(
+          "The filing request could not be saved."
+        );
       }
 
       if (upgradeId) {

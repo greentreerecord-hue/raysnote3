@@ -1,6 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import Link from "next/link";
+import {
+  useEffect,
+  useState,
+  type ChangeEvent,
+  type CSSProperties,
+  type FormEvent,
+} from "react";
 import { uploadPresigned } from "@vercel/blob/client";
 
 const PAYMENT_LINK =
@@ -13,7 +20,7 @@ type UploadedSong = {
   contentType: string;
 };
 
-type FormData = {
+type FilingForm = {
   authorName: string;
   claimantName: string;
   citizenship: string;
@@ -27,7 +34,7 @@ type FormData = {
   signature: string;
 };
 
-const emptyForm: FormData = {
+const emptyForm: FilingForm = {
   authorName: "",
   claimantName: "",
   citizenship: "",
@@ -42,14 +49,19 @@ const emptyForm: FormData = {
 };
 
 export default function GroupFilingPage() {
-  const [form, setForm] = useState<FormData>(emptyForm);
+  const [form, setForm] = useState<FilingForm>(emptyForm);
   const [sessionId, setSessionId] = useState("");
+  const [applicationId, setApplicationId] = useState("");
+  const [applicationTitle, setApplicationTitle] = useState("");
+  const [upgrade, setUpgrade] = useState(false);
   const [paid, setPaid] = useState(false);
-  const [checkingPayment, setCheckingPayment] = useState(true);
+  const [checking, setChecking] = useState(true);
   const [eligible, setEligible] = useState(false);
   const [authorized, setAuthorized] = useState(false);
+  const [sameWork, setSameWork] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
-  const [uploadedSongs, setUploadedSongs] = useState<UploadedSong[]>([]);
+  const [uploadedSongs, setUploadedSongs] =
+    useState<UploadedSong[]>([]);
   const [uploading, setUploading] = useState(false);
   const [uploadMessage, setUploadMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -62,58 +74,161 @@ export default function GroupFilingPage() {
     .filter(Boolean);
 
   useEffect(() => {
-    async function verifyPayment() {
-      const params = new URLSearchParams(window.location.search);
-      const returnedSessionId = params.get("session_id");
-      const savedSessionId = localStorage.getItem(
-        "raysnotes-group-filing-credit"
-      );
-      const paymentSession = returnedSessionId || savedSessionId || "";
+    let active = true;
 
-      if (!paymentSession) {
-        setCheckingPayment(false);
-        return;
-      }
+    async function load() {
+      const params = new URLSearchParams(window.location.search);
+      const requestedApplication = params.get("application_id") || "";
+      const returnedSession = params.get("session_id") || "";
+
+      setApplicationId(requestedApplication);
 
       try {
+        let savedSession = "";
+
+        try {
+          savedSession = localStorage.getItem(
+            requestedApplication
+              ? `raysnotes-group-upgrade-${requestedApplication}`
+              : "raysnotes-group-filing-credit"
+          ) || "";
+        } catch {
+          // Payment can still be verified from the return URL.
+        }
+
+        const paymentSession = returnedSession || savedSession;
+
+        if (!paymentSession) {
+          if (requestedApplication && active) {
+            setMessage(
+              "Open the upgrade from your saved preparation application."
+            );
+          }
+          return;
+        }
+
         const response = await fetch(
-          `/api/group-filing-payment?session_id=${encodeURIComponent(
-            paymentSession
-          )}`
+          `/api/group-filing-payment?session_id=${encodeURIComponent(paymentSession)}`,
+          { cache: "no-store" }
         );
 
         const data = await response.json();
 
-        if (response.ok && data.paid) {
-          setSessionId(paymentSession);
-          setPaid(true);
+        if (!response.ok || data.paid !== true) {
+          throw new Error(
+            data.error ||
+              "Payment could not be verified. Do not pay again."
+          );
+        }
+
+        const linkedApplication =
+          typeof data.applicationId === "string"
+            ? data.applicationId
+            : "";
+
+        if (
+          requestedApplication &&
+          requestedApplication !== linkedApplication
+        ) {
+          throw new Error(
+            "This payment belongs to a different application."
+          );
+        }
+
+        if (!active) return;
+
+        setSessionId(paymentSession);
+        setApplicationId(linkedApplication);
+        setUpgrade(Boolean(linkedApplication));
+        setPaid(true);
+
+        setForm((current) => ({
+          ...current,
+          email: data.customerEmail || current.email,
+          authorName: data.customerName || current.authorName,
+          phone: data.customerPhone || current.phone,
+        }));
+
+        try {
           localStorage.setItem(
-            "raysnotes-group-filing-credit",
+            linkedApplication
+              ? `raysnotes-group-upgrade-${linkedApplication}`
+              : "raysnotes-group-filing-credit",
             paymentSession
+          );
+        } catch {
+          // Browser storage is optional.
+        }
+
+        if (linkedApplication) {
+          const draftResponse = await fetch(
+            `/api/my-applications?application_id=${encodeURIComponent(linkedApplication)}`,
+            { cache: "no-store" }
+          );
+
+          const draftData = await draftResponse.json();
+
+          if (!draftResponse.ok) {
+            throw new Error(
+              "Payment verified, but preparation details could not be loaded. You can enter them below."
+            );
+          }
+
+          if (!active) return;
+
+          const draft = draftData.application.form || {};
+
+          setApplicationTitle(
+            draftData.application.title || draft.title || ""
           );
 
           setForm((current) => ({
             ...current,
-            email: data.customerEmail || current.email,
-            authorName: data.customerName || current.authorName,
-            phone: data.customerPhone || current.phone,
+            authorName: draft.authorName || current.authorName,
+            claimantName: draft.claimantName || "",
+            citizenship: draft.citizenship || "",
+            workForHire: draft.workForHire || "",
+            email: draft.email || current.email,
+            phone: draft.phone || current.phone,
+            address: draft.address || "",
+            authorshipType:
+              draft.workType === "Music and lyrics"
+                ? "Music and lyrics"
+                : "",
+            notes: [
+              draft.preexistingMaterial
+                ? `Preexisting material: ${draft.preexistingMaterial}`
+                : "",
+              draft.newMaterial
+                ? `New material: ${draft.newMaterial}`
+                : "",
+            ].filter(Boolean).join("\n"),
           }));
         }
-      } catch {
-        setMessage("Payment verification could not be completed.");
+      } catch (error) {
+        if (active) {
+          setMessage(
+            error instanceof Error
+              ? error.message
+              : "Payment verification could not be completed."
+          );
+        }
       } finally {
-        setCheckingPayment(false);
+        if (active) setChecking(false);
       }
     }
 
-    verifyPayment();
+    void load();
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   function updateField(
-    event:
-      | React.ChangeEvent<HTMLInputElement>
-      | React.ChangeEvent<HTMLTextAreaElement>
-      | React.ChangeEvent<HTMLSelectElement>
+    event: ChangeEvent<
+      HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+    >
   ) {
     const { name, value } = event.target;
 
@@ -121,14 +236,23 @@ export default function GroupFilingPage() {
       ...current,
       [name]: value,
     }));
+
+    if (name === "songTitles") {
+      setUploadedSongs([]);
+      setUploadMessage(
+        "Song titles changed. Upload files in the matching title order."
+      );
+    }
   }
 
-  function chooseFiles(event: React.ChangeEvent<HTMLInputElement>) {
+  function chooseFiles(event: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files || []);
 
     if (files.length > 10) {
       setUploadMessage("Please select no more than 10 files.");
       event.target.value = "";
+      setSelectedFiles([]);
+      setUploadedSongs([]);
       return;
     }
 
@@ -143,43 +267,39 @@ export default function GroupFilingPage() {
 
   async function uploadSongs() {
     if (!paid || !sessionId) {
-      setUploadMessage("Verified payment is required before uploading.");
+      setUploadMessage("Verified payment is required.");
       return;
     }
 
-    if (selectedFiles.length < 1 || selectedFiles.length > 10) {
-      setUploadMessage("Select between 1 and 10 song files.");
-      return;
-    }
-
-    if (songs.length !== selectedFiles.length) {
+    if (
+      selectedFiles.length < 1 ||
+      selectedFiles.length > 10 ||
+      selectedFiles.length !== songs.length
+    ) {
       setUploadMessage(
-        "Enter one song title for every selected song file."
+        "Enter between 1 and 10 titles and select one file per title."
       );
       return;
     }
 
-    try {
-      setUploading(true);
-      setUploadedSongs([]);
-      setUploadMessage("Uploading songs securely...");
+    setUploading(true);
+    setUploadedSongs([]);
 
+    try {
       const completed: UploadedSong[] = [];
 
-      for (let index = 0; index < selectedFiles.length; index += 1) {
+      for (let index = 0; index < selectedFiles.length; index++) {
         const file = selectedFiles[index];
         const safeName = file.name
           .replace(/[^a-zA-Z0-9._-]/g, "_")
           .slice(-120);
 
         setUploadMessage(
-          `Uploading song ${index + 1} of ${selectedFiles.length}...`
+          `Uploading song ${index + 1} of ${selectedFiles.length}…`
         );
 
         const blob = await uploadPresigned(
-          `group-filing/${sessionId}/${Date.now()}-${
-            index + 1
-          }-${safeName}`,
+          `group-filing/${sessionId}/${Date.now()}-${index + 1}-${safeName}`,
           file,
           {
             access: "private",
@@ -202,7 +322,6 @@ export default function GroupFilingPage() {
         `${completed.length} song file(s) uploaded securely.`
       );
     } catch (error) {
-      setUploadedSongs([]);
       setUploadMessage(
         error instanceof Error
           ? error.message
@@ -213,30 +332,26 @@ export default function GroupFilingPage() {
     }
   }
 
-  async function submitRequest(event: React.FormEvent) {
+  async function submitRequest(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setMessage("");
-    setReference("");
 
     if (!paid || !sessionId) {
       setMessage("Verified payment is required.");
       return;
     }
 
-    if (songs.length < 1 || songs.length > 10) {
-      setMessage("Enter between 1 and 10 song titles.");
+    if (
+      songs.length < 1 ||
+      songs.length > 10 ||
+      uploadedSongs.length !== songs.length
+    ) {
+      setMessage("Upload one file for each of 1–10 song titles.");
       return;
     }
 
-    if (uploadedSongs.length !== songs.length) {
-      setMessage(
-        "Upload one song file for every song title before submitting."
-      );
-      return;
-    }
-
-    if (!eligible || !authorized) {
-      setMessage("Please complete both required confirmations.");
+    if (!eligible || !authorized || (upgrade && !sameWork)) {
+      setMessage("Please complete all required confirmations.");
       return;
     }
 
@@ -245,24 +360,24 @@ export default function GroupFilingPage() {
       form.authorName.trim().toLowerCase()
     ) {
       setMessage(
-        "The electronic signature must match the author's legal name."
+        "The signature must match the author's full legal name."
       );
       return;
     }
 
-    try {
-      setSubmitting(true);
+    setSubmitting(true);
 
+    try {
       const response = await fetch("/api/group-filing-request", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...form,
           songTitles: songs,
           depositFiles: uploadedSongs,
           sessionId,
+          applicationId: applicationId || undefined,
+          sameWorkConfirmed: upgrade ? sameWork : undefined,
           eligibilityConfirmed: eligible,
           authorizationConfirmed: authorized,
         }),
@@ -271,15 +386,27 @@ export default function GroupFilingPage() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || "The request could not be submitted.");
+        throw new Error(
+          data.error || "The request could not be submitted."
+        );
       }
 
       setReference(data.reference);
       setMessage(
-        "Your filing request and private song files were received."
+        data.existing
+          ? "This filing request was already received."
+          : "Your filing request and private song files were received."
       );
-      localStorage.removeItem("raysnotes-group-filing-credit");
-      localStorage.removeItem("raysnotes-group-filing-draft");
+
+      try {
+        localStorage.removeItem(
+          upgrade
+            ? `raysnotes-group-upgrade-${applicationId}`
+            : "raysnotes-group-filing-credit"
+        );
+      } catch {
+        // The server has already saved the request.
+      }
     } catch (error) {
       setMessage(
         error instanceof Error
@@ -291,435 +418,375 @@ export default function GroupFilingPage() {
     }
   }
 
+  function input(
+    name: keyof FilingForm,
+    label: string,
+    type = "text"
+  ) {
+    return (
+      <label>
+        {label}
+        <input
+          required
+          type={type}
+          name={name}
+          value={form[name]}
+          onChange={updateField}
+          maxLength={500}
+        />
+      </label>
+    );
+  }
+
   return (
-    <main
-      style={{
-        minHeight: "100vh",
-        background:
-          "linear-gradient(145deg, #071426 0%, #0b2440 48%, #06111f 100%)",
-        color: "white",
-        padding: "42px 18px 80px",
-        fontFamily: "Arial, sans-serif",
-      }}
-    >
-      <div style={{ maxWidth: 1050, margin: "0 auto" }}>
-        <p
-          style={{
-            color: "#4df58b",
-            fontWeight: 800,
-            letterSpacing: 3,
-          }}
-        >
-          FULL-SERVICE GROUP FILING
+    <main className="page">
+      <div className="container">
+        <nav>
+          <Link href="/copyright">← Copyright Center</Link>
+          <Link href="/my-applications">My Applications</Link>
+        </nav>
+
+        <p className="eyebrow">FULL-SERVICE GROUP FILING</p>
+        <h1>Register Up to 10 Unpublished Songs</h1>
+
+        <p>
+          Ray&apos;sNotes prepares and manually submits an eligible
+          group application after reviewing your information and deposits.
         </p>
 
-        <h1
-          style={{
-            fontSize: "clamp(42px, 7vw, 78px)",
-            lineHeight: 1.02,
-            margin: "10px 0 18px",
-          }}
-        >
-          Register Up to 10 Unpublished Songs
-        </h1>
-
-        <p style={{ fontSize: 20, color: "#d7e6f5" }}>
-          Ray&apos;sNotes prepares and manually submits an eligible group
-          application after reviewing your information and deposits.
-        </p>
-
-        <section
-          style={{
-            marginTop: 35,
-            padding: 32,
-            borderRadius: 18,
-            background: "white",
-            color: "#122033",
-            textAlign: "center",
-            border: "3px solid #f0a12a",
-          }}
-        >
-          <h2 style={{ fontSize: 38, margin: 0 }}>$159 total</h2>
-
-          <p style={{ fontSize: 18, fontWeight: 700 }}>
-            $74 Ray&apos;sNotes service fee + $85 U.S. Copyright Office
-            filing fee
+        <section className="card payment">
+          <h2>$159 total package</h2>
+          <p>
+            $74 Ray&apos;sNotes service fee + $85 government filing fee.
           </p>
 
-          <p style={{ color: "#4b5563" }}>
-            The government fee is paid to the Copyright Office after
-            eligibility review. Registration is not guaranteed. No legal
-            advice.
-          </p>
-
-          {!paid && (
-            <a
-              href={PAYMENT_LINK}
-              style={{
-                display: "inline-block",
-                marginTop: 10,
-                padding: "17px 28px",
-                borderRadius: 12,
-                background: "#0797e8",
-                color: "white",
-                textDecoration: "none",
-                fontSize: 19,
-                fontWeight: 800,
-              }}
-            >
-              Purchase Full-Service Group Filing — $159
-            </a>
+          {upgrade && (
+            <div className="credit">
+              <p>Preparation credit: <strong>$24.99</strong></p>
+              <p>Upgrade payment: <strong>$134.01</strong></p>
+              <p>
+                Linked preparation:{" "}
+                <strong>{applicationTitle || applicationId}</strong>
+              </p>
+            </div>
           )}
 
-          {checkingPayment && <p>Checking payment...</p>}
+          <p>
+            The government fee is paid after eligibility review.
+            Registration is not guaranteed. No legal advice.
+          </p>
 
-          {paid && (
-            <p
-              style={{
-                color: "#08783f",
-                fontWeight: 800,
-                fontSize: 18,
-              }}
-            >
-              ✓ Payment verified — complete the form and upload your songs
+          {checking ? (
+            <p>Checking payment…</p>
+          ) : paid ? (
+            <p className="success">
+              ✓ Payment verified. Complete the form and upload your songs.
             </p>
+          ) : applicationId ? (
+            <Link
+              className="button"
+              href={`/copyright/apply?application_id=${encodeURIComponent(applicationId)}`}
+            >
+              Return to Preparation and Open Upgrade
+            </Link>
+          ) : (
+            <>
+              <a className="button" href={PAYMENT_LINK}>
+                Purchase Full-Service Group Filing — $159
+              </a>
+              <p>
+                Already purchased preparation? Open your application
+                to use its upgrade credit.
+              </p>
+              <Link href="/my-applications">Open My Applications</Link>
+            </>
           )}
         </section>
 
-        <form
-          onSubmit={submitRequest}
-          style={{
-            marginTop: 28,
-            padding: 28,
-            borderRadius: 18,
-            background: "white",
-            color: "#122033",
-            opacity: paid ? 1 : 0.55,
-          }}
-        >
-          <fieldset
-            disabled={!paid || submitting}
-            style={{ border: 0, padding: 0, margin: 0 }}
-          >
-            <h2>1. Author and claimant</h2>
-
-            <label style={labelStyle}>
-              Author&apos;s full legal name
-              <input
-                required
-                name="authorName"
-                value={form.authorName}
-                onChange={updateField}
-                style={inputStyle}
-              />
-            </label>
-
-            <label style={labelStyle}>
-              Copyright claimant&apos;s legal name
-              <input
-                required
-                name="claimantName"
-                value={form.claimantName}
-                onChange={updateField}
-                style={inputStyle}
-              />
-            </label>
-
-            <label style={labelStyle}>
-              Citizenship or domicile
-              <input
-                required
-                name="citizenship"
-                value={form.citizenship}
-                onChange={updateField}
-                style={inputStyle}
-              />
-            </label>
-
-            <label style={labelStyle}>
-              Was this created as work made for hire?
-              <select
-                required
-                name="workForHire"
-                value={form.workForHire}
-                onChange={updateField}
-                style={inputStyle}
-              >
-                <option value="">Choose one</option>
-                <option value="No">No</option>
-                <option value="Yes">Yes</option>
-                <option value="Not sure">Not sure</option>
-              </select>
-            </label>
-
-            <h2 style={{ marginTop: 38 }}>2. Songs and authorship</h2>
-
-            <label style={labelStyle}>
-              Song titles — enter one title per line
-              <textarea
-                required
-                name="songTitles"
-                value={form.songTitles}
-                onChange={updateField}
-                rows={7}
-                placeholder={"Song One\nSong Two\nSong Three"}
-                style={inputStyle}
-              />
-            </label>
-
-            <p>
-              Songs entered: <strong>{songs.length}</strong> of 10
-            </p>
-
-            <label style={labelStyle}>
-              What are you registering?
-              <select
-                required
-                name="authorshipType"
-                value={form.authorshipType}
-                onChange={updateField}
-                style={inputStyle}
-              >
-                <option value="">Choose one</option>
-                <option value="Music and lyrics">Music and lyrics</option>
-                <option value="Music only">Music only</option>
-                <option value="Lyrics only">Lyrics only</option>
-                <option value="Sound recordings and compositions">
-                  Sound recordings and compositions
-                </option>
-              </select>
-            </label>
-
-            <label style={labelStyle}>
-              Coauthors, samples, purchased beats, or preexisting material
-              <textarea
-                name="notes"
-                value={form.notes}
-                onChange={updateField}
-                rows={5}
-                placeholder="Explain anything Ray'sNotes should review."
-                style={inputStyle}
-              />
-            </label>
-
-            <h2 style={{ marginTop: 38 }}>
-              3. Securely upload your songs
-            </h2>
-
-            <p>
-              Select one audio file for each title, in the same order.
-              You may also upload PDF or text lyric deposits.
-            </p>
-
-            <input
-              type="file"
-              multiple
-              accept="audio/*,.pdf,.txt"
-              onChange={chooseFiles}
-              style={{ margin: "12px 0", fontSize: 16 }}
-            />
-
-            <p>
-              Selected: <strong>{selectedFiles.length}</strong> file(s)
-            </p>
-
-            <button
-              type="button"
-              onClick={uploadSongs}
-              disabled={
-                uploading ||
-                selectedFiles.length < 1 ||
-                selectedFiles.length > 10
-              }
-              style={secondaryButtonStyle}
-            >
-              {uploading ? "Uploading securely..." : "Upload Songs"}
-            </button>
-
-            {uploadMessage && (
-              <p style={{ fontWeight: 700 }}>{uploadMessage}</p>
+        {message && (
+          <section className="message" role="status">
+            <p>{message}</p>
+            {reference && (
+              <p>Reference: <strong>{reference}</strong></p>
             )}
+          </section>
+        )}
 
-            {uploadedSongs.length > 0 && (
-              <div
-                style={{
-                  padding: 16,
-                  borderRadius: 10,
-                  background: "#eafaf1",
-                  marginTop: 15,
-                }}
+        {!reference && (
+          <form onSubmit={submitRequest} className="card">
+            <fieldset
+              disabled={!paid || checking || submitting || uploading}
+            >
+              <h2>1. Author and claimant</h2>
+              {input("authorName", "Author’s full legal name")}
+              {input("claimantName", "Copyright claimant’s legal name")}
+              {input("citizenship", "Citizenship or domicile")}
+
+              <label>
+                Was this created as work made for hire?
+                <select
+                  required
+                  name="workForHire"
+                  value={form.workForHire}
+                  onChange={updateField}
+                >
+                  <option value="">Choose one</option>
+                  <option>No</option>
+                  <option>Yes</option>
+                  <option>Not sure</option>
+                </select>
+              </label>
+
+              <h2>2. Songs and authorship</h2>
+
+              {upgrade && (
+                <p>
+                  Enter the individual song titles from the same work
+                  or album as your linked preparation application.
+                </p>
+              )}
+
+              <label>
+                Song titles — one title per line
+                <textarea
+                  required
+                  name="songTitles"
+                  value={form.songTitles}
+                  onChange={updateField}
+                  rows={7}
+                  maxLength={5000}
+                  placeholder={"Song One\nSong Two"}
+                />
+              </label>
+
+              <p>Songs entered: <strong>{songs.length}</strong> of 10</p>
+
+              <label>
+                What are you registering?
+                <select
+                  required
+                  name="authorshipType"
+                  value={form.authorshipType}
+                  onChange={updateField}
+                >
+                  <option value="">Choose one</option>
+                  <option>Music and lyrics</option>
+                  <option>Music only</option>
+                  <option>Lyrics only</option>
+                  <option>Sound recordings and compositions</option>
+                </select>
+              </label>
+
+              <label>
+                Coauthors, samples, purchased beats, or preexisting material
+                <textarea
+                  name="notes"
+                  value={form.notes}
+                  onChange={updateField}
+                  rows={5}
+                  maxLength={10000}
+                />
+              </label>
+
+              <h2>3. Securely upload your songs</h2>
+              <p>
+                Select one file per title in the same order.
+                Audio, PDF, and text deposits are supported.
+              </p>
+
+              <input
+                type="file"
+                multiple
+                accept="audio/*,.pdf,.txt"
+                onChange={chooseFiles}
+              />
+
+              <p>Selected: {selectedFiles.length} file(s)</p>
+
+              <button
+                type="button"
+                onClick={uploadSongs}
+                disabled={selectedFiles.length < 1}
               >
-                <strong>Private uploads completed:</strong>
+                Upload Songs
+              </button>
+
+              {uploadedSongs.length > 0 && (
                 <ol>
-                  {uploadedSongs.map((song) => (
-                    <li key={song.pathname}>{song.name}</li>
+                  {uploadedSongs.map((song, index) => (
+                    <li key={song.pathname}>
+                      {songs[index]} — {song.name}
+                    </li>
                   ))}
                 </ol>
-              </div>
-            )}
+              )}
 
-            <h2 style={{ marginTop: 38 }}>4. Contact information</h2>
+              <h2>4. Contact information</h2>
+              {input("email", "Email address", "email")}
+              {input("phone", "Phone number", "tel")}
 
-            <label style={labelStyle}>
-              Email address
-              <input
-                required
-                type="email"
-                name="email"
-                value={form.email}
-                onChange={updateField}
-                style={inputStyle}
-              />
-            </label>
+              <label>
+                Complete mailing address
+                <textarea
+                  required
+                  name="address"
+                  value={form.address}
+                  onChange={updateField}
+                  rows={4}
+                  maxLength={5000}
+                />
+              </label>
 
-            <label style={labelStyle}>
-              Phone number
-              <input
-                required
-                type="tel"
-                name="phone"
-                value={form.phone}
-                onChange={updateField}
-                style={inputStyle}
-              />
-            </label>
+              <h2>5. Confirmations and signature</h2>
 
-            <label style={labelStyle}>
-              Complete mailing address
-              <textarea
-                required
-                name="address"
-                value={form.address}
-                onChange={updateField}
-                rows={4}
-                style={inputStyle}
-              />
-            </label>
+              {upgrade && (
+                <label className="check">
+                  <input
+                    required
+                    type="checkbox"
+                    checked={sameWork}
+                    onChange={(event) => setSameWork(event.target.checked)}
+                  />
+                  <span>
+                    These songs belong to the same work or album as
+                    my linked preparation application. I am applying
+                    its $24.99 credit to this filing only.
+                  </span>
+                </label>
+              )}
 
-            <h2 style={{ marginTop: 38 }}>
-              5. Confirmations and signature
-            </h2>
+              <label className="check">
+                <input
+                  required
+                  type="checkbox"
+                  checked={eligible}
+                  onChange={(event) => setEligible(event.target.checked)}
+                />
+                <span>
+                  All works are unpublished, there are no more than
+                  10 works, and the claimant or joint claimants are
+                  the same for every work. I understand Ray&apos;sNotes
+                  must review all eligibility requirements.
+                </span>
+              </label>
 
-            <label style={checkStyle}>
-              <input
-                required
-                type="checkbox"
-                checked={eligible}
-                onChange={(event) => setEligible(event.target.checked)}
-              />
-              <span>
-                I confirm that all works are unpublished, there are no more
-                than 10 works, and the claimant or joint claimants are the
-                same for every work.
-              </span>
-            </label>
+              <label className="check">
+                <input
+                  required
+                  type="checkbox"
+                  checked={authorized}
+                  onChange={(event) => setAuthorized(event.target.checked)}
+                />
+                <span>
+                  I authorize Ray&apos;sNotes to prepare and submit
+                  this application using my information and files.
+                  Registration is not guaranteed, and this service
+                  does not provide legal advice.
+                </span>
+              </label>
 
-            <label style={checkStyle}>
-              <input
-                required
-                type="checkbox"
-                checked={authorized}
-                onChange={(event) => setAuthorized(event.target.checked)}
-              />
-              <span>
-                I authorize Ray&apos;sNotes to prepare and submit this
-                application using the information and files I provide. I
-                understand registration is not guaranteed and this service
-                does not provide legal advice.
-              </span>
-            </label>
+              {input(
+                "signature",
+                "Electronic signature — author’s full legal name"
+              )}
 
-            <label style={labelStyle}>
-              Electronic signature — type the author&apos;s full legal name
-              <input
-                required
-                name="signature"
-                value={form.signature}
-                onChange={updateField}
-                style={inputStyle}
-              />
-            </label>
-
-            <button
-              type="submit"
-              disabled={submitting || uploadedSongs.length !== songs.length}
-              style={primaryButtonStyle}
-            >
-              {submitting
-                ? "Submitting securely..."
-                : "Submit Filing Request"}
-            </button>
-
-            {message && (
-              <div
-                style={{
-                  marginTop: 20,
-                  padding: 16,
-                  borderRadius: 10,
-                  background: reference ? "#eafaf1" : "#fff2f2",
-                  fontWeight: 700,
-                }}
+              <button
+                type="submit"
+                disabled={
+                  songs.length < 1 ||
+                  songs.length > 10 ||
+                  uploadedSongs.length !== songs.length
+                }
               >
-                <p>{message}</p>
-                {reference && (
-                  <p>
-                    Reference number: <strong>{reference}</strong>
-                  </p>
-                )}
-              </div>
-            )}
-          </fieldset>
-        </form>
+                {submitting ? "Submitting…" : "Submit Filing Request"}
+              </button>
+            </fieldset>
+          </form>
+        )}
+
+        {uploadMessage && (
+          <p className="message" role="status">{uploadMessage}</p>
+        )}
       </div>
+
+      <style jsx>{`
+        .page {
+          min-height: 100vh;
+          background: linear-gradient(145deg, #071426, #0b2440);
+          color: white;
+          padding: 36px 18px 80px;
+          font-family: Arial, sans-serif;
+        }
+        .container { max-width: 1050px; margin: auto; }
+        nav { display: flex; flex-wrap: wrap; gap: 24px; }
+        nav :global(a) { color: #67e8f9; }
+        .eyebrow {
+          margin-top: 36px;
+          color: #4df58b;
+          font-weight: 800;
+          letter-spacing: 3px;
+        }
+        h1 { font-size: clamp(36px, 6vw, 66px); }
+        h2 { margin: 32px 0 18px; }
+        .card h2:first-child { margin-top: 0; }
+        p { line-height: 1.6; }
+        .card {
+          margin-top: 28px;
+          padding: 28px;
+          border-radius: 18px;
+          background: white;
+          color: #122033;
+        }
+        .payment { text-align: center; border: 3px solid #f0a12a; }
+        .credit {
+          padding: 14px;
+          background: #eafaf1;
+          border-radius: 12px;
+          overflow-wrap: anywhere;
+        }
+        .success { color: #08783f; font-weight: 800; }
+        fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+        label { display: grid; gap: 8px; margin: 18px 0; font-weight: 700; }
+        input, select, textarea {
+          width: 100%;
+          box-sizing: border-box;
+          padding: 13px;
+          border: 2px solid #9aa8b8;
+          border-radius: 8px;
+          font: inherit;
+          background: white;
+          color: #122033;
+        }
+        textarea { resize: vertical; }
+        .check {
+          display: flex;
+          align-items: flex-start;
+          gap: 12px;
+          line-height: 1.5;
+        }
+        .check input { width: 20px; height: 20px; flex-shrink: 0; }
+        button, .payment :global(.button) {
+          display: inline-block;
+          padding: 16px 24px;
+          border: 0;
+          border-radius: 10px;
+          background: #087fdd;
+          color: white;
+          font: inherit;
+          font-weight: 800;
+          cursor: pointer;
+          text-decoration: none;
+        }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        .message {
+          padding: 18px;
+          margin-top: 24px;
+          border-radius: 12px;
+          background: #243650;
+          overflow-wrap: anywhere;
+        }
+        li { margin: 10px 0; overflow-wrap: anywhere; }
+      `}</style>
     </main>
   );
-}
-
-const labelStyle: React.CSSProperties = {
-  display: "grid",
-  gap: 8,
-  margin: "18px 0",
-  fontWeight: 700,
-};
-
-const inputStyle: React.CSSProperties = {
-  width: "100%",
-  boxSizing: "border-box",
-  padding: 13,
-  border: "2px solid #9aa8b8",
-  borderRadius: 8,
-  fontSize: 16,
-  fontFamily: "Arial, sans-serif",
-};
-
-const checkStyle: React.CSSProperties = {
-  display: "flex",
-  alignItems: "flex-start",
-  gap: 12,
-  margin: "20px 0",
-  lineHeight: 1.5,
-  fontWeight: 600,
-};
-
-const primaryButtonStyle: React.CSSProperties = {
-  marginTop: 22,
-  padding: "16px 25px",
-  border: 0,
-  borderRadius: 10,
-  background: "#087fdd",
-  color: "white",
-  fontSize: 18,
-  fontWeight: 800,
-  cursor: "pointer",
-};
-
-const secondaryButtonStyle: React.CSSProperties = {
-  padding: "13px 22px",
-  border: 0,
-  borderRadius: 9,
-  background: "#136f46",
-  color: "white",
-  fontSize: 17,
-  fontWeight: 800,
-  cursor: "pointer",
-}; 
+} 
