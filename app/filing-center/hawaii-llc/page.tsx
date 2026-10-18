@@ -53,6 +53,9 @@ export default function HawaiiLLCPage() {
   const [form, setForm] = useState<Draft>(emptyForm);
   const [applicationId, setApplicationId] = useState("");
   const [paid, setPaid] = useState(false);
+  const [upgradePaid, setUpgradePaid] = useState(false);
+  const [upgradeConfirmed, setUpgradeConfirmed] = useState(false);
+  const [paymentUnresolved, setPaymentUnresolved] = useState(false);
   const [certified, setCertified] = useState(false);
   const [checking, setChecking] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -67,11 +70,21 @@ export default function HawaiiLLCPage() {
       const params = new URLSearchParams(window.location.search);
       const id = params.get("application_id");
       const sessionId = params.get("session_id");
+      const upgradeSessionId = params.get("upgrade_session_id");
+
+      function clearPaymentParameter(name: string) {
+        const url = new URL(window.location.href);
+        url.searchParams.delete(name);
+
+        window.history.replaceState(
+          {},
+          "",
+          `${url.pathname}${url.search}${url.hash}`
+        );
+      }
 
       try {
-        if (!id) {
-          return;
-        }
+        if (!id) return;
 
         const response = await fetch(
           `/api/llc-applications?application_id=${encodeURIComponent(id)}`,
@@ -82,16 +95,18 @@ export default function HawaiiLLCPage() {
 
         if (!response.ok) {
           throw new Error(
-            result.error ||
-              "Your LLC application could not be loaded."
+            result.error || "Your LLC application could not be loaded."
           );
         }
 
         if (!active) return;
 
-        setApplicationId(result.application.id);
+        const loadedId = result.application.id;
+
+        setApplicationId(loadedId);
         setForm(readForm(result.application.form));
         setPaid(result.application.paid === true);
+        setUpgradePaid(result.application.upgradePaid === true);
 
         try {
           const saved = localStorage.getItem(LOCAL_DRAFT_KEY);
@@ -112,7 +127,7 @@ export default function HawaiiLLCPage() {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              applicationId: result.application.id,
+              applicationId: loadedId,
               sessionId,
             }),
           });
@@ -122,25 +137,50 @@ export default function HawaiiLLCPage() {
           if (!verification.ok || payment.paid !== true) {
             throw new Error(
               payment.error ||
-                "Payment could not be verified. If charged, do not pay again."
+                "Preparation payment could not be verified. If charged, do not pay again."
             );
           }
 
           if (!active) return;
 
           setPaid(true);
-          setMessage("Payment verified for this LLC preparation package.");
+          setMessage("Preparation payment verified for this LLC.");
+          clearPaymentParameter("session_id");
+        }
 
-          window.history.replaceState(
-            {},
-            "",
-            `/filing-center/hawaii-llc?application_id=${encodeURIComponent(
-              result.application.id
-            )}`
+        if (upgradeSessionId) {
+          const verification = await fetch("/api/llc-upgrade-payment", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              applicationId: loadedId,
+              sessionId: upgradeSessionId,
+            }),
+          });
+
+          const payment = await verification.json();
+
+          if (!verification.ok || payment.upgradePaid !== true) {
+            throw new Error(
+              payment.error ||
+                "Upgrade payment could not be verified. If charged, do not pay again."
+            );
+          }
+
+          if (!active) return;
+
+          setUpgradePaid(true);
+          setMessage(
+            "Full-service upgrade payment verified. State filing and approval are not confirmed by this payment."
           );
+          clearPaymentParameter("upgrade_session_id");
         }
       } catch (error) {
         if (active) {
+          if (sessionId || upgradeSessionId) {
+            setPaymentUnresolved(true);
+          }
+
           setMessage(
             error instanceof Error ? error.message : "Please try again."
           );
@@ -175,6 +215,7 @@ export default function HawaiiLLCPage() {
     setForm((current) => ({ ...current, [field]: value }));
     setDirty(true);
     setCertified(false);
+    setUpgradeConfirmed(false);
     setMessage("Unsaved changes. Click Save Draft.");
   }
 
@@ -183,7 +224,7 @@ export default function HawaiiLLCPage() {
 
     const confirmed = window.confirm(
       "Replace the answers currently shown with your earlier browser draft? " +
-        "This will not change this application's payment. " +
+        "This will not change this application's payments. " +
         "Click Save Draft afterward to save the imported answers to your account."
     );
 
@@ -192,6 +233,7 @@ export default function HawaiiLLCPage() {
     setForm(localDraft);
     setDirty(true);
     setCertified(false);
+    setUpgradeConfirmed(false);
     setMessage("Earlier draft imported. Click Save Draft to keep it.");
   }
 
@@ -223,30 +265,42 @@ export default function HawaiiLLCPage() {
       await persistDraft();
       setMessage("LLC draft saved to your account.");
     } catch (error) {
-      setMessage(
-        error instanceof Error ? error.message : "Save failed."
-      );
+      setMessage(error instanceof Error ? error.message : "Save failed.");
     } finally {
       setBusy(false);
     }
   }
 
-  async function purchase() {
+  async function openCheckout(upgrade: boolean) {
+    if (busy || paymentUnresolved) return;
+
+    if (upgrade && (!paid || upgradePaid || !upgradeConfirmed)) {
+      setMessage(
+        "Preparation payment and upgrade acknowledgment are required."
+      );
+      return;
+    }
+
+    if (!upgrade && paid) return;
+
     setBusy(true);
     setMessage("Saving your draft and opening checkout…");
 
     try {
       await persistDraft();
 
-      const response = await fetch("/api/llc-checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ applicationId }),
-      });
+      const response = await fetch(
+        upgrade ? "/api/llc-upgrade-checkout" : "/api/llc-checkout",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ applicationId }),
+        }
+      );
 
       const result = await response.json();
 
-      if (!response.ok || !result.url) {
+      if (!response.ok || typeof result.url !== "string") {
         throw new Error(result.error || "Checkout could not be opened.");
       }
 
@@ -378,9 +432,9 @@ export default function HawaiiLLCPage() {
           <h2>Preparation service</h2>
           <p>
             This package organizes the information you provide.
-            It does not submit Articles of Organization, form an LLC,
-            reserve a business name, or include government fees.
-            Ray&apos;sNotes does not provide legal or tax advice.
+            Preparation does not submit Articles of Organization,
+            form an LLC, reserve a business name, or include government
+            fees. Ray&apos;sNotes does not provide legal or tax advice.
           </p>
           <p>
             You can save unfinished answers and return later.
@@ -400,13 +454,24 @@ export default function HawaiiLLCPage() {
           <section className="card">
             <h2>Start or open your LLC draft</h2>
             <p>
-              Sign in through My Applications, then choose
-              Start Hawaii LLC Draft or open an existing LLC.
+              Sign in through My Applications, then choose Start
+              Hawaii LLC Draft or open an existing LLC.
             </p>
             <Link href="/my-applications">Open My Applications</Link>
           </section>
         ) : (
           <>
+            {paymentUnresolved && (
+              <section className="notice">
+                <h2>Payment verification needs attention</h2>
+                <p>
+                  Checkout is paused on this page to help prevent
+                  another payment. Refresh to retry verification.
+                  If you were charged, do not pay again.
+                </p>
+              </section>
+            )}
+
             <section className="card payment">
               <h2>Preparation Package — $24.99</h2>
               <p>
@@ -421,8 +486,8 @@ export default function HawaiiLLCPage() {
               ) : (
                 <button
                   type="button"
-                  onClick={purchase}
-                  disabled={busy}
+                  onClick={() => void openCheckout(false)}
+                  disabled={busy || paymentUnresolved}
                 >
                   Purchase Preparation — $24.99
                 </button>
@@ -430,15 +495,90 @@ export default function HawaiiLLCPage() {
 
               <p>
                 Your $24.99 preparation payment provides a one-time
-                credit toward the $149 full-service fee for this
-                same LLC. The remaining service charge would be
-                $124.01, plus government fees.
+                credit toward the $149 full-service fee for this same
+                LLC. The remaining service charge is $124.01.
+                Government fees are separate.
               </p>
+            </section>
 
-              <p>
-                Full-service upgrade checkout is coming soon.
-                Purchasing preparation does not submit a filing.
-              </p>
+            <section className="card payment">
+              <h2>Full-Service Upgrade</h2>
+
+              {upgradePaid ? (
+                <>
+                  <p className="success">
+                    ✓ Full-service upgrade payment received.
+                  </p>
+                  <p>
+                    Your $24.99 preparation payment and $124.01
+                    upgrade payment cover the $149 service fee.
+                    Government fees are separate.
+                  </p>
+                  <p>
+                    Payment is recorded for this application.
+                    This page does not confirm submission of Articles
+                    of Organization or state approval.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p>
+                    Service total: <strong>$149.00</strong>
+                    <br />
+                    Preparation credit: <strong>$24.99</strong>
+                    <br />
+                    Upgrade balance: <strong>$124.01</strong>
+                  </p>
+                  <p>
+                    The credit applies only to this LLC application.
+                    Government fees and registered-agent service
+                    are not included.
+                  </p>
+                  <p>
+                    Purchasing the upgrade records your service
+                    payment. State submission is a separate step,
+                    and payment does not guarantee approval.
+                  </p>
+
+                  {paid ? (
+                    <>
+                      <label className="confirmation">
+                        <input
+                          type="checkbox"
+                          checked={upgradeConfirmed}
+                          disabled={busy || paymentUnresolved}
+                          onChange={(event) =>
+                            setUpgradeConfirmed(event.target.checked)
+                          }
+                        />
+                        <span>
+                          I understand the $124.01 upgrade applies to
+                          this same LLC, government fees are separate,
+                          and payment does not itself submit or form
+                          an LLC.
+                        </span>
+                      </label>
+
+                      <button
+                        type="button"
+                        onClick={() => void openCheckout(true)}
+                        disabled={
+                          busy ||
+                          paymentUnresolved ||
+                          !upgradeConfirmed
+                        }
+                      >
+                        Continue to Upgrade Checkout — $124.01
+                      </button>
+                    </>
+                  ) : (
+                    <p className="hint">
+                      A verified preparation payment for this LLC
+                      is required before upgrading.
+                    </p>
+                  )}
+                </>
+              )}
             </section>
 
             {localDraft && (
@@ -723,6 +863,7 @@ export default function HawaiiLLCPage() {
           font-size: 14px;
         }
         button {
+          max-width: 100%;
           padding: 14px 22px;
           border: 0;
           border-radius: 10px;

@@ -12,6 +12,10 @@ import {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+type ApplicationWithUpgrade = LLCApplicationRow & {
+  upgradePaid: boolean;
+};
+
 function json(body: object, status = 200) {
   return NextResponse.json(body, {
     status,
@@ -46,19 +50,28 @@ export async function GET(request: NextRequest) {
 
     if (id !== null) {
       if (!validId(id)) {
-        return json({ error: "A valid LLC application is required." }, 400);
+        return json(
+          { error: "A valid LLC application is required." },
+          400
+        );
       }
 
-      const rows = await sql<LLCApplicationRow[]>`
+      const rows = await sql<ApplicationWithUpgrade[]>`
         SELECT
-          id,
-          title,
-          form_data AS form,
-          paid_at IS NOT NULL AS paid,
-          updated_at AS "updatedAt"
-        FROM raysnotes_llc_applications
-        WHERE id = ${id}
-          AND account_id = ${account.id}
+          a.id,
+          a.title,
+          a.form_data AS form,
+          a.paid_at IS NOT NULL AS paid,
+          a.updated_at AS "updatedAt",
+          EXISTS (
+            SELECT 1
+            FROM raysnotes_llc_upgrades u
+            WHERE u.application_id = a.id
+              AND u.paid_at IS NOT NULL
+          ) AS "upgradePaid"
+        FROM raysnotes_llc_applications a
+        WHERE a.id = ${id}
+          AND a.account_id = ${account.id}
         LIMIT 1
       `;
 
@@ -79,13 +92,19 @@ export async function GET(request: NextRequest) {
 
     const applications = await sql`
       SELECT
-        id,
-        title,
-        paid_at IS NOT NULL AS paid,
-        updated_at AS "updatedAt"
-      FROM raysnotes_llc_applications
-      WHERE account_id = ${account.id}
-      ORDER BY updated_at DESC, id
+        a.id,
+        a.title,
+        a.paid_at IS NOT NULL AS paid,
+        a.updated_at AS "updatedAt",
+        EXISTS (
+          SELECT 1
+          FROM raysnotes_llc_upgrades u
+          WHERE u.application_id = a.id
+            AND u.paid_at IS NOT NULL
+        ) AS "upgradePaid"
+      FROM raysnotes_llc_applications a
+      WHERE a.account_id = ${account.id}
+      ORDER BY a.updated_at DESC, a.id
     `;
 
     return json({ applications });
@@ -122,7 +141,10 @@ export async function POST(request: NextRequest) {
     try {
       body = await request.json();
     } catch {
-      return json({ error: "Invalid application request." }, 400);
+      return json(
+        { error: "Invalid application request." },
+        400
+      );
     }
 
     if (
@@ -130,7 +152,10 @@ export async function POST(request: NextRequest) {
       typeof body !== "object" ||
       Array.isArray(body)
     ) {
-      return json({ error: "Invalid application request." }, 400);
+      return json(
+        { error: "Invalid application request." },
+        400
+      );
     }
 
     const value = body as Record<string, unknown>;
@@ -175,7 +200,15 @@ export async function POST(request: NextRequest) {
         updated_at AS "updatedAt"
     `;
 
-    return json({ application: rows[0] }, 201);
+    return json(
+      {
+        application: {
+          ...rows[0],
+          upgradePaid: false,
+        },
+      },
+      201
+    );
   } catch (error) {
     console.error("LLC applications POST failed:", error);
 
@@ -274,7 +307,19 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    return json({ application: rows[0] });
+    const upgrades = await sql<{ paid: boolean }[]>`
+      SELECT paid_at IS NOT NULL AS paid
+      FROM raysnotes_llc_upgrades
+      WHERE application_id = ${rows[0].id}
+      LIMIT 1
+    `;
+
+    return json({
+      application: {
+        ...rows[0],
+        upgradePaid: upgrades[0]?.paid === true,
+      },
+    });
   } catch (error) {
     console.error("LLC applications PATCH failed:", error);
 
