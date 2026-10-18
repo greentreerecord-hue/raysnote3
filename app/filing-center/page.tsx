@@ -23,6 +23,12 @@ const paragraphStyle: CSSProperties = {
   lineHeight: 1.7,
 };
 
+const actionsStyle: CSSProperties = {
+  display: "flex",
+  flexWrap: "wrap",
+  gap: "14px",
+};
+
 export default function FilingCenterPage() {
   return (
     <main
@@ -44,27 +50,28 @@ export default function FilingCenterPage() {
             Ray&apos;sNotes Filing Center
           </h1>
 
-          <p
-            style={{
-              ...paragraphStyle,
-              fontSize: "20px",
-            }}
-          >
-            Find bankruptcy, copyright, and business filing
-            resources in one place.
+          <p style={{ ...paragraphStyle, fontSize: "20px" }}>
+            Find bankruptcy, copyright, and Hawaii LLC preparation
+            services and official filing resources in one place.
           </p>
 
           <p style={paragraphStyle}>
-            Explore official resources and Ray&apos;sNotes
-            preparation services. Opening a link or saving a
-            draft does not submit a filing. Each service explains
-            its scope, charges, and submission steps.
-            Ray&apos;sNotes does not provide legal advice.
+            Each service explains its scope, charges, and submission
+            steps. Saving a draft or purchasing a preparation package
+            does not submit a government filing. Ray&apos;sNotes
+            does not provide legal or tax advice.
           </p>
+
+          <a
+            href="/my-applications"
+            style={{ ...buttonStyle, background: "#0e7490" }}
+          >
+            Open My Applications
+          </a>
         </header>
 
         <section
-          aria-label="Filing resources"
+          aria-label="Preparation services and filing resources"
           style={{
             display: "grid",
             gridTemplateColumns:
@@ -82,13 +89,7 @@ export default function FilingCenterPage() {
               instructions and online options.
             </p>
 
-            <div
-              style={{
-                display: "flex",
-                flexWrap: "wrap",
-                gap: "14px",
-              }}
-            >
+            <div style={actionsStyle}>
               <a
                 href="https://www.uscourts.gov/court-programs/bankruptcy"
                 target="_blank"
@@ -111,24 +112,15 @@ export default function FilingCenterPage() {
             <h2>Copyright Center</h2>
 
             <p style={paragraphStyle}>
-              Open the Ray&apos;sNotes Copyright Center or visit
-              the U.S. Copyright Office for official registration
-              information.
+              Prepare copyright application summaries, return to
+              saved drafts, or explore the separate full-service
+              filing option.
             </p>
 
-            <div
-              style={{
-                display: "flex",
-                flexWrap: "wrap",
-                gap: "14px",
-              }}
-            >
+            <div style={actionsStyle}>
               <a
                 href="/copyright"
-                style={{
-                  ...buttonStyle,
-                  background: "#15803d",
-                }}
+                style={{ ...buttonStyle, background: "#15803d" }}
               >
                 Open Copyright Center
               </a>
@@ -145,38 +137,49 @@ export default function FilingCenterPage() {
           </article>
 
           <article style={cardStyle}>
-            <h2>Hawaii LLC Registration</h2>
+            <h2>Hawaii LLC Preparation Package</h2>
 
             <p
               style={{
                 color: "#67e8f9",
                 fontWeight: 700,
+                fontSize: "24px",
               }}
             >
-              Coming soon
+              $24.99 per LLC
             </p>
 
             <p style={paragraphStyle}>
-              Prepare your Hawaii LLC information, save your
-              progress, and request filing assistance through
-              Ray&apos;sNotes. Service pricing and state fees
-              will be displayed before payment when the service
-              launches.
+              Organize your business information, save unfinished
+              answers in your account, and unlock a downloadable
+              preparation summary and filing checklist with payment.
             </p>
 
             <p style={paragraphStyle}>
-              Preparing a draft does not form an LLC.
-              Registration requires acceptance by Hawaii&apos;s
-              Business Registration Division.
+              Your $24.99 preparation payment provides a one-time
+              credit toward the $149 full-service fee for the same
+              LLC. The remaining service charge is $124.01.
+              Government fees are separate.
             </p>
 
-            <div
-              style={{
-                display: "flex",
-                flexWrap: "wrap",
-                gap: "14px",
-              }}
-            >
+            <p style={{ ...paragraphStyle, color: "#fde68a" }}>
+              Full-service upgrade checkout is coming soon.
+              Preparation does not form an LLC, reserve a name,
+              or submit Articles of Organization.
+            </p>
+
+            <div style={actionsStyle}>
+              <a
+                href="/filing-center/hawaii-llc"
+                style={{ ...buttonStyle, background: "#0e7490" }}
+              >
+                Open LLC Preparation
+              </a>
+
+              <a href="/my-applications" style={buttonStyle}>
+                My Saved Applications
+              </a>
+
               <a
                 href="https://cca.hawaii.gov/breg/registration/dllc/"
                 target="_blank"
@@ -184,15 +187,6 @@ export default function FilingCenterPage() {
                 style={buttonStyle}
               >
                 Hawaii LLC Official Resources ↗
-              </a>
-
-              <a
-                href="https://www.sba.gov/"
-                target="_blank"
-                rel="noopener noreferrer"
-                style={buttonStyle}
-              >
-                Visit SBA.gov ↗
               </a>
             </div>
           </article>
@@ -207,8 +201,8 @@ export default function FilingCenterPage() {
             lineHeight: 1.7,
           }}
         >
-          External links open in a new tab. Filing requirements
-          and government fees are set by the relevant court or
+          External links open in a new tab. Government filing
+          requirements and fees are set by the relevant court or
           agency.
         </footer>
       </div>
