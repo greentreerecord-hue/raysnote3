@@ -17,6 +17,9 @@ type Application = {
 export default function MyApplicationsPage() {
   const [account, setAccount] = useState<Account | null>(null);
   const [applications, setApplications] = useState<Application[]>([]);
+  const [llcApplications, setLLCApplications] = useState<Application[]>([]);
+  const [copyrightError, setCopyrightError] = useState("");
+  const [llcError, setLLCError] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [register, setRegister] = useState(false);
@@ -25,16 +28,54 @@ export default function MyApplicationsPage() {
   const [message, setMessage] = useState("");
 
   async function loadApplications() {
-    const response = await fetch("/api/my-applications", {
-      cache: "no-store",
-    });
-    const result = await response.json();
+    setCopyrightError("");
+    setLLCError("");
 
-    if (!response.ok) {
-      throw new Error(result.error || "Applications could not be loaded.");
-    }
+    await Promise.all([
+      (async () => {
+        try {
+          const response = await fetch("/api/my-applications", {
+            cache: "no-store",
+          });
 
-    setApplications(result.applications);
+          const result = await response.json();
+
+          if (!response.ok) {
+            throw new Error(
+              result.error || "Copyright applications could not be loaded."
+            );
+          }
+
+          setApplications(result.applications);
+        } catch (error) {
+          setCopyrightError(
+            error instanceof Error ? error.message : "Please try again."
+          );
+        }
+      })(),
+
+      (async () => {
+        try {
+          const response = await fetch("/api/llc-applications", {
+            cache: "no-store",
+          });
+
+          const result = await response.json();
+
+          if (!response.ok) {
+            throw new Error(
+              result.error || "LLC applications could not be loaded."
+            );
+          }
+
+          setLLCApplications(result.applications);
+        } catch (error) {
+          setLLCError(
+            error instanceof Error ? error.message : "Please try again."
+          );
+        }
+      })(),
+    ]);
   }
 
   useEffect(() => {
@@ -43,6 +84,7 @@ export default function MyApplicationsPage() {
         const response = await fetch("/api/application-account", {
           cache: "no-store",
         });
+
         const result = await response.json();
 
         if (!response.ok) {
@@ -81,6 +123,7 @@ export default function MyApplicationsPage() {
           password,
         }),
       });
+
       const result = await response.json();
 
       if (!response.ok) {
@@ -89,6 +132,8 @@ export default function MyApplicationsPage() {
 
       setAccount(result.account);
       setPassword("");
+      setApplications([]);
+      setLLCApplications([]);
       await loadApplications();
     } catch (error) {
       setMessage(
@@ -113,6 +158,9 @@ export default function MyApplicationsPage() {
 
       setAccount(null);
       setApplications([]);
+      setLLCApplications([]);
+      setCopyrightError("");
+      setLLCError("");
       setMessage("");
     } catch (error) {
       setMessage(
@@ -123,24 +171,38 @@ export default function MyApplicationsPage() {
     }
   }
 
-  async function startApplication() {
+  async function startApplication(kind: "copyright" | "llc") {
     setBusy(true);
     setMessage("");
 
+    const isLLC = kind === "llc";
+
     try {
-      const response = await fetch("/api/my-applications", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: "Untitled application" }),
-      });
+      const response = await fetch(
+        isLLC ? "/api/llc-applications" : "/api/my-applications",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: isLLC ? "Untitled LLC" : "Untitled application",
+          }),
+        }
+      );
+
       const result = await response.json();
 
       if (!response.ok) {
-        throw new Error(result.error || "Application could not be created.");
+        throw new Error(
+          result.error || "Application could not be created."
+        );
       }
 
+      const path = isLLC
+        ? "/filing-center/hawaii-llc"
+        : "/copyright/apply";
+
       window.location.assign(
-        `/copyright/apply?application_id=${encodeURIComponent(
+        `${path}?application_id=${encodeURIComponent(
           result.application.id
         )}`
       );
@@ -152,25 +214,74 @@ export default function MyApplicationsPage() {
     }
   }
 
+  function applicationCards(
+    items: Application[],
+    kind: "copyright" | "llc"
+  ) {
+    const path =
+      kind === "llc"
+        ? "/filing-center/hawaii-llc"
+        : "/copyright/apply";
+
+    return (
+      <div className="applications">
+        {items.map((application) => (
+          <section className="card" key={application.id}>
+            <span className={application.paid ? "badge paid" : "badge"}>
+              {application.paid
+                ? "Preparation payment received"
+                : "Preparation payment needed"}
+            </span>
+
+            <h3>{application.title}</h3>
+
+            <p>
+              Updated{" "}
+              {new Date(application.updatedAt).toLocaleDateString()}
+            </p>
+
+            <Link
+              href={`${path}?application_id=${encodeURIComponent(
+                application.id
+              )}`}
+            >
+              Open {kind === "llc" ? "LLC draft" : "application"}
+            </Link>
+          </section>
+        ))}
+      </div>
+    );
+  }
+
   return (
     <main className="page">
       <div className="container">
-        <Link href="/copyright">← Copyright Center</Link>
+        <nav>
+          <Link href="/copyright">← Copyright Center</Link>
+          <Link href="/filing-center">Filing Center</Link>
+        </nav>
 
         <header>
           <p className="eyebrow">RAY&apos;SNOTES</p>
           <h1>My Applications</h1>
-          <p>Keep your preparation drafts and payments together by work.</p>
+          <p>
+            Keep your copyright and Hawaii LLC preparation drafts
+            and payments together in your account.
+          </p>
         </header>
 
-        {message && <p role="status" className="message">{message}</p>}
+        {message && (
+          <p role="status" className="message">
+            {message}
+          </p>
+        )}
 
         {loading ? (
           <p>Loading your account…</p>
         ) : !account ? (
           <section className="card">
             <h2>{register ? "Create your account" : "Sign in"}</h2>
-            <p>Use your account to return to your saved applications.</p>
+            <p>Return to your saved preparation applications.</p>
 
             <form onSubmit={signIn}>
               <label>
@@ -189,7 +300,9 @@ export default function MyApplicationsPage() {
                 Password
                 <input
                   type="password"
-                  autoComplete={register ? "new-password" : "current-password"}
+                  autoComplete={
+                    register ? "new-password" : "current-password"
+                  }
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                   minLength={12}
@@ -198,14 +311,21 @@ export default function MyApplicationsPage() {
                 />
               </label>
 
-              {register && <p>Choose a password with at least 12 characters.</p>}
+              {register && (
+                <p>Choose a password with at least 12 characters.</p>
+              )}
 
               <button disabled={busy} type="submit">
-                {busy ? "Please wait…" : register ? "Create account" : "Sign in"}
+                {busy
+                  ? "Please wait…"
+                  : register
+                    ? "Create account"
+                    : "Sign in"}
               </button>
             </form>
 
             <button
+              type="button"
               className="secondary"
               disabled={busy}
               onClick={() => {
@@ -213,56 +333,79 @@ export default function MyApplicationsPage() {
                 setMessage("");
               }}
             >
-              {register ? "Already have an account? Sign in" : "Create an account"}
+              {register
+                ? "Already have an account? Sign in"
+                : "Create an account"}
             </button>
           </section>
         ) : (
           <>
             <div className="toolbar">
               <p>Signed in as {account.email}</p>
-              <button className="secondary" onClick={signOut} disabled={busy}>
+              <button
+                className="secondary"
+                onClick={signOut}
+                disabled={busy}
+              >
                 Sign out
               </button>
             </div>
 
-            <button onClick={startApplication} disabled={busy}>
-              {busy ? "Please wait…" : "+ Start New Application"}
-            </button>
+            <section className="category">
+              <h2>Copyright Applications</h2>
 
-            <p className="note">
-              Each new application needs its own payment. These are preparation
-              summaries; they do not indicate Copyright Office registration.
-            </p>
+              <button
+                onClick={() => startApplication("copyright")}
+                disabled={busy}
+              >
+                + Start Copyright Application
+              </button>
 
-            {applications.length === 0 ? (
-              <section className="card">
-                <h2>No applications yet</h2>
-                <p>Start an application for Rabbit Hill or another work.</p>
-              </section>
-            ) : (
-              <div className="applications">
-                {applications.map((application) => (
-                  <section className="card" key={application.id}>
-                    <span className={application.paid ? "badge paid" : "badge"}>
-                      {application.paid ? "Payment received" : "Payment needed"}
-                    </span>
-                    <h2>{application.title || "Untitled application"}</h2>
-                    <p>
-                      Updated{" "}
-                      {new Date(application.updatedAt).toLocaleDateString()}
-                    </p>
-                    <Link
-                      className="open"
-                      href={`/copyright/apply?application_id=${encodeURIComponent(
-                        application.id
-                      )}`}
-                    >
-                      Open application
-                    </Link>
-                  </section>
-                ))}
-              </div>
-            )}
+              <p className="note">
+                Each application has its own preparation payment.
+                A preparation summary does not indicate Copyright
+                Office registration.
+              </p>
+
+              {copyrightError ? (
+                <p role="status" className="message">
+                  {copyrightError}
+                </p>
+              ) : applications.length === 0 ? (
+                <p>No copyright applications yet.</p>
+              ) : (
+                applicationCards(applications, "copyright")
+              )}
+            </section>
+
+            <section className="category">
+              <h2>Hawaii LLC Applications</h2>
+
+              <button
+                onClick={() => startApplication("llc")}
+                disabled={busy}
+              >
+                + Start Hawaii LLC Draft
+              </button>
+
+              <p className="note">
+                Preparation costs $24.99 per LLC. That payment
+                provides a one-time credit toward the $149
+                full-service fee for the same LLC. Government fees
+                are separate. A draft or preparation payment does
+                not form an LLC.
+              </p>
+
+              {llcError ? (
+                <p role="status" className="message">
+                  {llcError}
+                </p>
+              ) : llcApplications.length === 0 ? (
+                <p>No LLC applications yet.</p>
+              ) : (
+                applicationCards(llcApplications, "llc")
+              )}
+            </section>
           </>
         )}
       </div>
@@ -273,30 +416,50 @@ export default function MyApplicationsPage() {
           background: #080f24;
           color: #edf2ff;
           padding: 40px 20px 80px;
+          font-family: Arial, sans-serif;
         }
+
         .container {
           max-width: 960px;
           margin: auto;
         }
+
+        nav {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 24px;
+        }
+
+        .container :global(a) {
+          color: #67e8f9;
+        }
+
         header {
           margin: 40px 0 30px;
         }
+
         h1 {
           font-size: clamp(32px, 6vw, 52px);
           margin: 8px 0 16px;
         }
-        h2 {
+
+        h2,
+        h3 {
           margin: 16px 0;
+          overflow-wrap: anywhere;
         }
+
         p {
           line-height: 1.6;
           overflow-wrap: anywhere;
         }
+
         .eyebrow {
           color: #67e8f9;
           letter-spacing: 3px;
           font-weight: 700;
         }
+
         .card {
           background: #14203a;
           border: 1px solid #344662;
@@ -304,14 +467,17 @@ export default function MyApplicationsPage() {
           padding: 26px;
           margin-top: 24px;
         }
+
         form {
           max-width: 480px;
         }
+
         label {
           display: block;
           margin: 22px 0;
           font-weight: 600;
         }
+
         input {
           display: block;
           box-sizing: border-box;
@@ -324,6 +490,7 @@ export default function MyApplicationsPage() {
           color: white;
           font: inherit;
         }
+
         button {
           background: #67e8f9;
           color: #082033;
@@ -334,16 +501,19 @@ export default function MyApplicationsPage() {
           font-weight: 700;
           cursor: pointer;
         }
+
         button:disabled {
           opacity: 0.6;
           cursor: wait;
         }
+
         .secondary {
           background: transparent;
           color: #b9eaff;
           border: 1px solid #536984;
           margin-top: 16px;
         }
+
         .toolbar {
           display: flex;
           flex-wrap: wrap;
@@ -352,18 +522,29 @@ export default function MyApplicationsPage() {
           gap: 12px;
           margin-bottom: 24px;
         }
+
         .toolbar button {
           margin: 0;
         }
+
+        .category {
+          margin-top: 40px;
+          padding-top: 24px;
+          border-top: 1px solid #344662;
+        }
+
         .note {
           color: #bdcbe1;
-          max-width: 680px;
+          max-width: 760px;
         }
+
         .applications {
           display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+          grid-template-columns:
+            repeat(auto-fit, minmax(min(100%, 260px), 1fr));
           gap: 20px;
         }
+
         .badge {
           display: inline-block;
           background: #49381c;
@@ -372,15 +553,12 @@ export default function MyApplicationsPage() {
           border-radius: 20px;
           font-size: 14px;
         }
+
         .paid {
           background: #12463d;
           color: #a7f3d0;
         }
-        .open {
-          display: inline-block;
-          color: #67e8f9;
-          margin-top: 12px;
-        }
+
         .message {
           padding: 16px;
           background: #243650;
