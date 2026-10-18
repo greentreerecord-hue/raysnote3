@@ -47,6 +47,16 @@ type Upgrade = {
 };
 
 export async function POST(request: NextRequest) {
+  if (process.env.LLC_UPGRADE_CHECKOUT_ENABLED !== "true") {
+    return json(
+      {
+        error:
+          "Full-service upgrade checkout is coming soon. Preparation purchases and saved drafts remain available.",
+      },
+      503
+    );
+  }
+
   if (!isSameOrigin(request)) {
     return json(
       { error: "Please use the LLC application page." },
