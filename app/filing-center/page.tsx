@@ -18,6 +18,11 @@ const cardStyle: CSSProperties = {
   borderRadius: "18px",
 };
 
+const paragraphStyle: CSSProperties = {
+  color: "#cccccc",
+  lineHeight: 1.7,
+};
+
 export default function FilingCenterPage() {
   return (
     <main
@@ -39,15 +44,22 @@ export default function FilingCenterPage() {
             Ray&apos;sNotes Filing Center
           </h1>
 
-          <p style={{ color: "#cccccc", fontSize: "20px", lineHeight: 1.6 }}>
-            Find bankruptcy, copyright, and business filing resources
-            in one place.
+          <p
+            style={{
+              ...paragraphStyle,
+              fontSize: "20px",
+            }}
+          >
+            Find bankruptcy, copyright, and business filing
+            resources in one place.
           </p>
 
-          <p style={{ color: "#cccccc", lineHeight: 1.7 }}>
-            Ray&apos;sNotes provides resource links, not legal advice.
-            Opening a link does not submit a filing. Complete the
-            required steps with the relevant court or agency.
+          <p style={paragraphStyle}>
+            Explore official resources and Ray&apos;sNotes
+            preparation services. Opening a link or saving a
+            draft does not submit a filing. Each service explains
+            its scope, charges, and submission steps.
+            Ray&apos;sNotes does not provide legal advice.
           </p>
         </header>
 
@@ -63,44 +75,60 @@ export default function FilingCenterPage() {
           <article style={cardStyle}>
             <h2>Bankruptcy Resources</h2>
 
-            <p style={{ color: "#cccccc", lineHeight: 1.7 }}>
+            <p style={paragraphStyle}>
               Visit the official U.S. Courts website for bankruptcy
               information and resources for people filing without
               an attorney. Check your local court&apos;s filing
               instructions and online options.
             </p>
 
-            <a
-              href="https://www.uscourts.gov/court-programs/bankruptcy"
-              target="_blank"
-              rel="noopener noreferrer"
-              style={buttonStyle}
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: "14px",
+              }}
             >
-              U.S. Courts Bankruptcy ↗
-            </a><div style={{ marginTop: "16px" }}>
-  <a
-    href="/filing-center/bankruptcy"
-    style={buttonStyle}
-  >
-    Open Hawaii Preparation Package
-  </a>
-</div> 
+              <a
+                href="https://www.uscourts.gov/court-programs/bankruptcy"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={buttonStyle}
+              >
+                U.S. Courts Bankruptcy ↗
+              </a>
 
+              <a
+                href="/filing-center/bankruptcy"
+                style={buttonStyle}
+              >
+                Open Hawaii Preparation Package
+              </a>
+            </div>
           </article>
 
           <article style={cardStyle}>
             <h2>Copyright Center</h2>
 
-            <p style={{ color: "#cccccc", lineHeight: 1.7 }}>
+            <p style={paragraphStyle}>
               Open the Ray&apos;sNotes Copyright Center or visit
               the U.S. Copyright Office for official registration
               information.
             </p>
 
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "14px" }}>
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: "14px",
+              }}
+            >
               <a
                 href="/copyright"
-                style={{ ...buttonStyle, background: "#15803d" }}
+                style={{
+                  ...buttonStyle,
+                  background: "#15803d",
+                }}
               >
                 Open Copyright Center
               </a>
@@ -117,22 +145,56 @@ export default function FilingCenterPage() {
           </article>
 
           <article style={cardStyle}>
-            <h2>Business Filing Resources</h2>
+            <h2>Hawaii LLC Registration</h2>
 
-            <p style={{ color: "#cccccc", lineHeight: 1.7 }}>
-              Visit the U.S. Small Business Administration for
-              business registration resources. Use your state&apos;s
-              official agency for state filings.
+            <p
+              style={{
+                color: "#67e8f9",
+                fontWeight: 700,
+              }}
+            >
+              Coming soon
             </p>
 
-            <a
-              href="https://www.sba.gov/"
-              target="_blank"
-              rel="noopener noreferrer"
-              style={buttonStyle}
+            <p style={paragraphStyle}>
+              Prepare your Hawaii LLC information, save your
+              progress, and request filing assistance through
+              Ray&apos;sNotes. Service pricing and state fees
+              will be displayed before payment when the service
+              launches.
+            </p>
+
+            <p style={paragraphStyle}>
+              Preparing a draft does not form an LLC.
+              Registration requires acceptance by Hawaii&apos;s
+              Business Registration Division.
+            </p>
+
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: "14px",
+              }}
             >
-              Visit SBA.gov ↗
-            </a>
+              <a
+                href="https://cca.hawaii.gov/breg/registration/dllc/"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={buttonStyle}
+              >
+                Hawaii LLC Official Resources ↗
+              </a>
+
+              <a
+                href="https://www.sba.gov/"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={buttonStyle}
+              >
+                Visit SBA.gov ↗
+              </a>
+            </div>
           </article>
         </section>
 
@@ -146,7 +208,8 @@ export default function FilingCenterPage() {
           }}
         >
           External links open in a new tab. Filing requirements
-          and fees are set by the relevant court or agency.
+          and government fees are set by the relevant court or
+          agency.
         </footer>
       </div>
     </main>
