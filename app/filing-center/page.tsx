@@ -51,7 +51,7 @@ export default function FilingCenterPage() {
           </h1>
 
           <p style={{ ...paragraphStyle, fontSize: "20px" }}>
-            Find bankruptcy, copyright, and Hawaii LLC preparation
+            Find Hawaii LLC preparation, copyright, and bankruptcy
             services and official filing resources in one place.
           </p>
 
@@ -79,6 +79,61 @@ export default function FilingCenterPage() {
             gap: "24px",
           }}
         >
+          <article style={cardStyle}>
+            <h2>Hawaii LLC Preparation Package</h2>
+
+            <p
+              style={{
+                color: "#67e8f9",
+                fontWeight: 700,
+                fontSize: "24px",
+              }}
+            >
+              $24.99 per LLC
+            </p>
+
+            <p style={paragraphStyle}>
+              Organize your business information, save unfinished
+              answers in your account, and unlock a downloadable
+              preparation summary and filing checklist with payment.
+            </p>
+
+            <p style={paragraphStyle}>
+              Your $24.99 preparation payment provides a one-time
+              credit toward the $149 full-service fee for the same
+              LLC. The remaining service charge is $124.01.
+              Government fees are separate.
+            </p>
+
+            <p style={{ ...paragraphStyle, color: "#fde68a" }}>
+              Full-service upgrade checkout is coming soon.
+              Preparation does not form an LLC, reserve a name,
+              or submit Articles of Organization.
+            </p>
+
+            <div style={actionsStyle}>
+              <a
+                href="/filing-center/hawaii-llc"
+                style={{ ...buttonStyle, background: "#0e7490" }}
+              >
+                Open LLC Preparation
+              </a>
+
+              <a href="/my-applications" style={buttonStyle}>
+                My Saved Applications
+              </a>
+
+              <a
+                href="https://cca.hawaii.gov/breg/registration/dllc/"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={buttonStyle}
+              >
+                Hawaii LLC Official Resources ↗
+              </a>
+            </div>
+          </article>
+
           <article style={cardStyle}>
             <h2>Bankruptcy Resources</h2>
 
@@ -132,61 +187,6 @@ export default function FilingCenterPage() {
                 style={buttonStyle}
               >
                 U.S. Copyright Office ↗
-              </a>
-            </div>
-          </article>
-
-          <article style={cardStyle}>
-            <h2>Hawaii LLC Preparation Package</h2>
-
-            <p
-              style={{
-                color: "#67e8f9",
-                fontWeight: 700,
-                fontSize: "24px",
-              }}
-            >
-              $24.99 per LLC
-            </p>
-
-            <p style={paragraphStyle}>
-              Organize your business information, save unfinished
-              answers in your account, and unlock a downloadable
-              preparation summary and filing checklist with payment.
-            </p>
-
-            <p style={paragraphStyle}>
-              Your $24.99 preparation payment provides a one-time
-              credit toward the $149 full-service fee for the same
-              LLC. The remaining service charge is $124.01.
-              Government fees are separate.
-            </p>
-
-            <p style={{ ...paragraphStyle, color: "#fde68a" }}>
-              Full-service upgrade checkout is coming soon.
-              Preparation does not form an LLC, reserve a name,
-              or submit Articles of Organization.
-            </p>
-
-            <div style={actionsStyle}>
-              <a
-                href="/filing-center/hawaii-llc"
-                style={{ ...buttonStyle, background: "#0e7490" }}
-              >
-                Open LLC Preparation
-              </a>
-
-              <a href="/my-applications" style={buttonStyle}>
-                My Saved Applications
-              </a>
-
-              <a
-                href="https://cca.hawaii.gov/breg/registration/dllc/"
-                target="_blank"
-                rel="noopener noreferrer"
-                style={buttonStyle}
-              >
-                Hawaii LLC Official Resources ↗
               </a>
             </div>
           </article>
