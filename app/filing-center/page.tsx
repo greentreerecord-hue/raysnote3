@@ -29,6 +29,12 @@ const actionsStyle: CSSProperties = {
   gap: "14px",
 };
 
+const priceStyle: CSSProperties = {
+  color: "#67e8f9",
+  fontWeight: 700,
+  fontSize: "24px",
+};
+
 export default function FilingCenterPage() {
   return (
     <main
@@ -51,8 +57,8 @@ export default function FilingCenterPage() {
           </h1>
 
           <p style={{ ...paragraphStyle, fontSize: "20px" }}>
-            Find Hawaii LLC preparation, copyright, and bankruptcy
-            services and official filing resources in one place.
+            Find Hawaii LLC, trademark, and patent preparation
+            tools, plus copyright and bankruptcy resources.
           </p>
 
           <p style={paragraphStyle}>
@@ -82,15 +88,7 @@ export default function FilingCenterPage() {
           <article style={cardStyle}>
             <h2>Hawaii LLC Preparation Package</h2>
 
-            <p
-              style={{
-                color: "#67e8f9",
-                fontWeight: 700,
-                fontSize: "24px",
-              }}
-            >
-              $24.99 per LLC
-            </p>
+            <p style={priceStyle}>$24.99 per LLC</p>
 
             <p style={paragraphStyle}>
               Organize your business information, save unfinished
@@ -130,6 +128,93 @@ export default function FilingCenterPage() {
                 style={buttonStyle}
               >
                 Hawaii LLC Official Resources ↗
+              </a>
+            </div>
+          </article>
+
+          <article style={cardStyle}>
+            <h2>Trademark Preparation Package</h2>
+
+            <p style={priceStyle}>
+              $24.99 per qualifying package
+            </p>
+
+            <p style={paragraphStyle}>
+              Organize your proposed brand name or logo, owner
+              information, products or services, and supporting
+              materials.
+            </p>
+
+            <p style={paragraphStyle}>
+              Start a draft and save it in this browser.
+              Trademark drafts are currently separate from
+              My Applications.
+            </p>
+
+            <p style={{ ...paragraphStyle, color: "#fde68a" }}>
+              Checkout and paid PDF downloads are coming soon.
+              No payment is collected on the preparation page.
+              Package scope and eligibility details will be
+              explained before purchase.
+            </p>
+
+            <p style={paragraphStyle}>
+              Preparation only. Trademark searches, legal opinions,
+              government filing fees, and legal representation
+              are not included. Purchasing a package does not
+              register a trademark or guarantee approval.
+            </p>
+
+            <div style={actionsStyle}>
+              <a
+                href="/filing-center/trademark"
+                style={{ ...buttonStyle, background: "#0e7490" }}
+              >
+                Open Trademark Preparation
+              </a>
+            </div>
+          </article>
+
+          <article style={cardStyle}>
+            <h2>Patent Preparation Organizer</h2>
+
+            <p style={priceStyle}>
+              $24.99 per qualifying package
+            </p>
+
+            <p style={paragraphStyle}>
+              Organize your invention description, inventor
+              information, development notes, supporting materials,
+              and questions for a patent professional.
+            </p>
+
+            <p style={paragraphStyle}>
+              Start a draft and save it in this browser.
+              Patent drafts are currently separate from
+              My Applications.
+            </p>
+
+            <p style={{ ...paragraphStyle, color: "#fde68a" }}>
+              Checkout and paid PDF downloads are coming soon.
+              No payment is collected on the organizer page.
+              Package scope and eligibility details will be
+              explained before purchase.
+            </p>
+
+            <p style={paragraphStyle}>
+              Preparation only. Patent searches, patentability
+              opinions, patent application or claim drafting,
+              government filing fees, and legal representation
+              are not included. Purchasing an organizer does not
+              file a patent application or create patent protection.
+            </p>
+
+            <div style={actionsStyle}>
+              <a
+                href="/filing-center/patent"
+                style={{ ...buttonStyle, background: "#0e7490" }}
+              >
+                Open Patent Organizer
               </a>
             </div>
           </article>
@@ -202,8 +287,8 @@ export default function FilingCenterPage() {
           }}
         >
           External links open in a new tab. Government filing
-          requirements and fees are set by the relevant court or
-          agency.
+          requirements and fees are set by the relevant court
+          or agency.
         </footer>
       </div>
     </main>
