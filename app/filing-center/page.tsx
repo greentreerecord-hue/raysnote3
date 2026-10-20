@@ -16,6 +16,7 @@ const cardStyle: CSSProperties = {
   background: "#151515",
   border: "1px solid #444",
   borderRadius: "18px",
+  overflowWrap: "anywhere",
 };
 
 const paragraphStyle: CSSProperties = {
@@ -72,7 +73,7 @@ export default function FilingCenterPage() {
             href="/my-applications"
             style={{ ...buttonStyle, background: "#0e7490" }}
           >
-            Open My Applications
+            Open My Applications / Sign In
           </a>
         </header>
 
@@ -142,27 +143,34 @@ export default function FilingCenterPage() {
             <p style={paragraphStyle}>
               Organize your proposed brand name or logo, owner
               information, products or services, and supporting
-              materials.
+              notes.
             </p>
 
             <p style={paragraphStyle}>
-              Start a draft and save it in this browser.
-              Trademark drafts are currently separate from
-              My Applications.
+              Save unfinished answers to your account and return
+              later. Open your saved drafts under Your trademark
+              drafts on the trademark preparation page.
+            </p>
+
+            <p style={paragraphStyle}>
+              Purchase preparation through a separate $24.99
+              checkout. The package includes a preparation summary
+              and checklist, with PDF download available after
+              payment is verified.
+            </p>
+
+            <p style={paragraphStyle}>
+              One package covers one proposed brand name or logo
+              and its associated products or services. Qualification
+              concerns the preparation package&apos;s scope, not
+              whether a trademark can be registered.
             </p>
 
             <p style={{ ...paragraphStyle, color: "#fde68a" }}>
-              Checkout and paid PDF downloads are coming soon.
-              No payment is collected on the preparation page.
-              Package scope and eligibility details will be
-              explained before purchase.
-            </p>
-
-            <p style={paragraphStyle}>
               Preparation only. Trademark searches, legal opinions,
-              government filing fees, and legal representation
-              are not included. Purchasing a package does not
-              register a trademark or guarantee approval.
+              government filing, government fees, and legal
+              representation are not included. Purchasing a package
+              does not register a trademark or guarantee approval.
             </p>
 
             <div style={actionsStyle}>
@@ -189,24 +197,32 @@ export default function FilingCenterPage() {
             </p>
 
             <p style={paragraphStyle}>
-              Start a draft and save it in this browser.
-              Patent drafts are currently separate from
-              My Applications.
-            </p>
-
-            <p style={{ ...paragraphStyle, color: "#fde68a" }}>
-              Checkout and paid PDF downloads are coming soon.
-              No payment is collected on the organizer page.
-              Package scope and eligibility details will be
-              explained before purchase.
+              Save unfinished answers to your account and return
+              later. Open your saved drafts under Your patent
+              drafts on the patent organizer page.
             </p>
 
             <p style={paragraphStyle}>
+              Purchase the organizer through a separate $24.99
+              checkout. The package includes a preparation summary
+              and checklist, with PDF download available after
+              payment is verified.
+            </p>
+
+            <p style={paragraphStyle}>
+              One package organizes information about one invention.
+              Qualification concerns the organizer&apos;s scope,
+              not patent eligibility, patentability, ownership,
+              or legal inventorship.
+            </p>
+
+            <p style={{ ...paragraphStyle, color: "#fde68a" }}>
               Preparation only. Patent searches, patentability
               opinions, patent application or claim drafting,
-              government filing fees, and legal representation
-              are not included. Purchasing an organizer does not
-              file a patent application or create patent protection.
+              government filing, government fees, and legal
+              representation are not included. Purchasing an
+              organizer does not file a patent application,
+              establish a filing date, or create patent protection.
             </p>
 
             <div style={actionsStyle}>
