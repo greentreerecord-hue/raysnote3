@@ -199,6 +199,7 @@ export default function TrademarkPage() {
   useEffect(() => {
     function warn(event: BeforeUnloadEvent) {
       if (!dirty) return;
+
       event.preventDefault();
       event.returnValue = "";
     }
@@ -209,6 +210,24 @@ export default function TrademarkPage() {
       window.removeEventListener("beforeunload", warn);
     };
   }, [dirty]);
+
+  // Unlock controls when returning from Stripe through browser history.
+  useEffect(() => {
+    function handlePageShow(event: PageTransitionEvent) {
+      if (!event.persisted) return;
+
+      setBusy(false);
+      setMessage(
+        "You returned from another page. Your saved draft is available."
+      );
+    }
+
+    window.addEventListener("pageshow", handlePageShow);
+
+    return () => {
+      window.removeEventListener("pageshow", handlePageShow);
+    };
+  }, []);
 
   function update(field: Field, value: string) {
     setForm((current) => ({ ...current, [field]: value }));
@@ -769,15 +788,15 @@ export default function TrademarkPage() {
           margin: 0;
           min-width: 0;
         }
-        label {
+        .container :global(label) {
           display: block;
           margin: 20px 0;
           font-weight: 700;
           line-height: 1.6;
         }
-        input,
-        select,
-        textarea {
+        .container :global(input),
+        .container :global(select),
+        .container :global(textarea) {
           display: block;
           width: 100%;
           box-sizing: border-box;
@@ -790,7 +809,7 @@ export default function TrademarkPage() {
           font: inherit;
           color-scheme: dark;
         }
-        textarea {
+        .container :global(textarea) {
           resize: vertical;
         }
         .hint {
@@ -812,15 +831,16 @@ export default function TrademarkPage() {
           opacity: 0.5;
           cursor: not-allowed;
         }
-        .confirmation {
+        .container :global(label.confirmation) {
           display: flex;
           align-items: flex-start;
           gap: 12px;
         }
-        .confirmation input {
+        .container :global(.confirmation input) {
           width: 20px;
           height: 20px;
           margin: 3px 0;
+          padding: 0;
           flex-shrink: 0;
         }
         @media (max-width: 480px) {

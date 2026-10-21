@@ -166,6 +166,7 @@ export default function PatentPage() {
                   "Payment could not be verified. If charged, do not pay again."
               );
             }
+
             return;
           }
 
@@ -213,6 +214,7 @@ export default function PatentPage() {
   useEffect(() => {
     function warn(event: BeforeUnloadEvent) {
       if (!dirty) return;
+
       event.preventDefault();
       event.returnValue = "";
     }
@@ -223,6 +225,24 @@ export default function PatentPage() {
       window.removeEventListener("beforeunload", warn);
     };
   }, [dirty]);
+
+  // Unlock controls when returning from Stripe through browser history.
+  useEffect(() => {
+    function handlePageShow(event: PageTransitionEvent) {
+      if (!event.persisted) return;
+
+      setBusy(false);
+      setMessage(
+        "You returned from another page. Your saved draft is available."
+      );
+    }
+
+    window.addEventListener("pageshow", handlePageShow);
+
+    return () => {
+      window.removeEventListener("pageshow", handlePageShow);
+    };
+  }, []);
 
   function update(field: Field, value: string) {
     setForm((current) => ({ ...current, [field]: value }));
