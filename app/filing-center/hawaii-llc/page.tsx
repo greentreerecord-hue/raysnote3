@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState, type FormEvent } from "react";
 
 const LOCAL_DRAFT_KEY = "raysnotes-hawaii-llc-draft-v1";
+const CHECKOUT_MESSAGE = "Saving your draft and opening checkout…";
 
 const emptyForm = {
   companyName: "",
@@ -62,6 +63,23 @@ export default function HawaiiLLCPage() {
   const [dirty, setDirty] = useState(false);
   const [message, setMessage] = useState("");
   const [localDraft, setLocalDraft] = useState<Draft | null>(null);
+
+  useEffect(() => {
+    function handleReturn(event: PageTransitionEvent) {
+      if (!event.persisted) return;
+
+      setBusy(false);
+      setMessage((current) =>
+        current === CHECKOUT_MESSAGE ? "" : current
+      );
+    }
+
+    window.addEventListener("pageshow", handleReturn);
+
+    return () => {
+      window.removeEventListener("pageshow", handleReturn);
+    };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -284,7 +302,7 @@ export default function HawaiiLLCPage() {
     if (!upgrade && paid) return;
 
     setBusy(true);
-    setMessage("Saving your draft and opening checkout…");
+    setMessage(CHECKOUT_MESSAGE);
 
     try {
       await persistDraft();
